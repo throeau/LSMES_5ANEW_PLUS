@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wsdl:definitions xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:tm="http://microsoft.com/wsdl/mime/textMatching/" xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" xmlns:tns="http://tempuri.org/" xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" targetNamespace="http://tempuri.org/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+  <wsdl:types>
+    <s:schema elementFormDefault="qualified" targetNamespace="http://tempuri.org/">
+      <s:element name="SendCellDataOfLsmesToSapPack">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="info" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="SendCellDataOfLsmesToSapPackResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="SendCellDataOfLsmesToSapPackResult" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="IsException">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="info" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="IsExceptionResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="IsExceptionResult" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="string" nillable="true" type="s:string" />
+    </s:schema>
+  </wsdl:types>
+  <wsdl:message name="SendCellDataOfLsmesToSapPackSoapIn">
+    <wsdl:part name="parameters" element="tns:SendCellDataOfLsmesToSapPack" />
+  </wsdl:message>
+  <wsdl:message name="SendCellDataOfLsmesToSapPackSoapOut">
+    <wsdl:part name="parameters" element="tns:SendCellDataOfLsmesToSapPackResponse" />
+  </wsdl:message>
+  <wsdl:message name="IsExceptionSoapIn">
+    <wsdl:part name="parameters" element="tns:IsException" />
+  </wsdl:message>
+  <wsdl:message name="IsExceptionSoapOut">
+    <wsdl:part name="parameters" element="tns:IsExceptionResponse" />
+  </wsdl:message>
+  <wsdl:message name="SendCellDataOfLsmesToSapPackHttpGetIn">
+    <wsdl:part name="info" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="SendCellDataOfLsmesToSapPackHttpGetOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="IsExceptionHttpGetIn">
+    <wsdl:part name="info" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="IsExceptionHttpGetOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="SendCellDataOfLsmesToSapPackHttpPostIn">
+    <wsdl:part name="info" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="SendCellDataOfLsmesToSapPackHttpPostOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="IsExceptionHttpPostIn">
+    <wsdl:part name="info" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="IsExceptionHttpPostOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:portType name="CellToSapPackSoap">
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <wsdl:input message="tns:SendCellDataOfLsmesToSapPackSoapIn" />
+      <wsdl:output message="tns:SendCellDataOfLsmesToSapPackSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <wsdl:input message="tns:IsExceptionSoapIn" />
+      <wsdl:output message="tns:IsExceptionSoapOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:portType name="CellToSapPackHttpGet">
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <wsdl:input message="tns:SendCellDataOfLsmesToSapPackHttpGetIn" />
+      <wsdl:output message="tns:SendCellDataOfLsmesToSapPackHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <wsdl:input message="tns:IsExceptionHttpGetIn" />
+      <wsdl:output message="tns:IsExceptionHttpGetOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:portType name="CellToSapPackHttpPost">
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <wsdl:input message="tns:SendCellDataOfLsmesToSapPackHttpPostIn" />
+      <wsdl:output message="tns:SendCellDataOfLsmesToSapPackHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <wsdl:input message="tns:IsExceptionHttpPostIn" />
+      <wsdl:output message="tns:IsExceptionHttpPostOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="CellToSapPackSoap" type="tns:CellToSapPackSoap">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <soap:operation soapAction="http://tempuri.org/SendCellDataOfLsmesToSapPack" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <soap:operation soapAction="http://tempuri.org/IsException" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="CellToSapPackSoap12" type="tns:CellToSapPackSoap">
+    <soap12:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <soap12:operation soapAction="http://tempuri.org/SendCellDataOfLsmesToSapPack" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <soap12:operation soapAction="http://tempuri.org/IsException" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="CellToSapPackHttpGet" type="tns:CellToSapPackHttpGet">
+    <http:binding verb="GET" />
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <http:operation location="/SendCellDataOfLsmesToSapPack" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <http:operation location="/IsException" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="CellToSapPackHttpPost" type="tns:CellToSapPackHttpPost">
+    <http:binding verb="POST" />
+    <wsdl:operation name="SendCellDataOfLsmesToSapPack">
+      <http:operation location="/SendCellDataOfLsmesToSapPack" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="IsException">
+      <http:operation location="/IsException" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="CellToSapPack">
+    <wsdl:port name="CellToSapPackSoap" binding="tns:CellToSapPackSoap">
+      <soap:address location="http://172.30.3.2:9991/WebService/DataTransfer/CellToSapPack.asmx" />
+    </wsdl:port>
+    <wsdl:port name="CellToSapPackSoap12" binding="tns:CellToSapPackSoap12">
+      <soap12:address location="http://172.30.3.2:9991/WebService/DataTransfer/CellToSapPack.asmx" />
+    </wsdl:port>
+    <wsdl:port name="CellToSapPackHttpGet" binding="tns:CellToSapPackHttpGet">
+      <http:address location="http://172.30.3.2:9991/WebService/DataTransfer/CellToSapPack.asmx" />
+    </wsdl:port>
+    <wsdl:port name="CellToSapPackHttpPost" binding="tns:CellToSapPackHttpPost">
+      <http:address location="http://172.30.3.2:9991/WebService/DataTransfer/CellToSapPack.asmx" />
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>
