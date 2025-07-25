@@ -98,7 +98,7 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                     }
                     else
                     {
-                        sql = string.Format("SELECT C.NAME,P.VALUE FROM SYS.EXTENDED_PROPERTIES P ,SYS.COLUMNS C WHERE P.MAJOR_ID=OBJECT_ID('DESAY_SYNCBATTERY') AND P.MAJOR_ID=C.OBJECT_ID AND P.MINOR_ID=C.COLUMN_ID AND C.NAME <> '' AND P.VALUE <> '';", info);
+                        sql = string.Format("SELECT C.NAME,P.VALUE FROM SYS.EXTENDED_PROPERTIES P ,SYS.COLUMNS C WHERE P.MAJOR_ID=OBJECT_ID('{0}_SYNCBATTERY') AND P.MAJOR_ID=C.OBJECT_ID AND P.MINOR_ID=C.COLUMN_ID AND C.NAME <> '' AND P.VALUE <> '';", info.Split(',')[1]);
                     }
                     StringBuilder title = new StringBuilder();
                     conn.Open();                    
@@ -142,7 +142,50 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                 }
             }
         }
+        /////////////////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////// 查询各型号定义的数据范围 //////////////////////////
+        /////////////////////////////////////////////////////////////////////////////////////////
+        [WebMethod]
+        public void GetRange(string info)
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                string sql = null;
+                string result = null;
+                conn.Open();
+                try
+                {
+                    if (info.Contains("SCUD"))
+                    {
+                        sql = string.Format("SELECT RANGE FROM SCUD_CONFIG WHERE ITEM_NO = '{0}';", info.Split(',')[1]);
+                    }
+                    else
+                    {
+                        return;
+                    }
+                    SqlCommand comm = new SqlCommand(sql, conn);
+                    SqlDataReader reader = comm.ExecuteReader();
 
+                    Context.Response.Charset = "UTF-8";
+                    Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+                    if (reader.HasRows)
+                    {
+                        reader.Read();
+                        result = reader[0].ToString();
+                        reader.Close();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                }
+                finally
+                {
+                    Context.Response.Write(result);
+                    Context.Response.End();
+                }
+            }
+        }
         /////////////////////////////////////////////////////////////////////////////////////////
         ///////////////////////////////////// SMP 数据回传 //////////////////////////////////////
         /////////////////////////////////////////////////////////////////////////////////////////
@@ -200,18 +243,6 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
         [WebMethod]
         public void SMP_CreateTask()
         {
-            //try
-            //{
-            //    SyncService service = new SyncSMP();
-            //    SyncTask task = service.CreateTask();
-            //    return service.AddTask(task);
-            //}
-            //catch (Exception ex)
-            //{
-            //    SysLog log = new SysLog(ex.Message);
-            //    return 0;
-            //}
-
             SyncService service = new SyncSMP();
             SyncTask task = service.CreateTask();
             string result = service.AddTask(task).ToString();
@@ -244,11 +275,25 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                 SysLog log = new SysLog(ex.Message);
             }
         }
+        //[WebMethod]
+        //public void SMP_SyncData()
+        //{
+        //    SyncService service = new SyncSMP();
+        //    service.SyncData();
+        //}
         [WebMethod]
-        public void SMP_SyncData()
+        public void SMP_SyncData(string handle,string taskno)
         {
-            SyncService service = new SyncSMP();
-            service.SyncData();
+            SyncSMP service = new SyncSMP();
+            // 实际发送的数量
+            int count = service.SyncData2(handle, taskno);
+            // 任务结束后发送数量
+            int _count = service.GetQtyOfSend(handle);
+            if (count == _count)
+            {
+                TaskManagement man = new TaskManagement();
+                man.UpdateTask(taskno, "结束", "", handle);
+            }
         }
         [WebMethod]
         public void SMP_Search(string dt,string task,string barcode)
@@ -429,6 +474,29 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
         /////////////////////////////////////////////////////////////////////////////////////////
         [WebMethod]
 
+        public void DesayBom()
+        {
+            SyncDesay desay = new SyncDesay();
+            List<BomDesay> lstBom = desay.GetBom();
+            string json = JsonConvert.SerializeObject(lstBom);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(json);
+            Context.Response.End();
+        }
+        [WebMethod]
+        /// <summary>
+        /// 创建任务通过 BOM
+        /// </summary>
+        /// <param name="bomno"> BOM </param>
+        /// <returns></returns>
+        public string Desay_CreateTaskByBom(string bomno)
+        {
+            SyncDesay desay = new SyncDesay();
+            DesayTask task = desay.CreateDesayTaskByBomno(bomno);
+            return task.HANDLE;
+        }
+        [WebMethod]
         /// <summary>
         /// 创建任务
         /// </summary>
@@ -480,7 +548,6 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             desay.Complete(ref task);
         }
         [WebMethod]
-
         public void Desay_SendData(string taskID)
         {
             try
@@ -498,7 +565,6 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             }
         }
         [WebMethod]
-
         public int Desay_Ready(string taskID)
         {
             SyncDesay desay = new SyncDesay();
@@ -508,10 +574,21 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
         ///////////////////////////////////// Sunwoda 数据回传 //////////////////////////////////
         /////////////////////////////////////////////////////////////////////////////////////////
         [WebMethod]
-        public void Sunwoda_CreateTask(string productLine)
+        public void Sunwoda_Bom(string bomno)
         {
             SyncSunwoda sunwoda = new SyncSunwoda();
-            SunwodaTask task = sunwoda.CreateTask(productLine);
+            Hashtable result = sunwoda.GetBom(bomno);
+            string info = JsonConvert.SerializeObject(result);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(info);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Sunwoda_CreateTask(string handle)
+        {
+            SyncSunwoda sunwoda = new SyncSunwoda();
+            SunwodaTask task = sunwoda.CreateTask(handle);
             string result = JsonConvert.SerializeObject(task);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
@@ -542,12 +619,13 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             Context.Response.End();
         }
         [WebMethod]
-        public void Sunwoda_SyncData(string taskID)
+        public void Sunwoda_SyncData(string taskID, string taskno)
         {
             if (string.IsNullOrEmpty(taskID))
             {
                 return;
             }
+
             SyncSunwoda sunwoda = new SyncSunwoda();
             SunwodaTask task = new SunwodaTask();
             task = sunwoda.GetTask(taskID);
@@ -557,6 +635,10 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                 task = sunwoda.GetTask(taskID);
                 int result = sunwoda.SendData(task);
             }
+
+            TaskManagement man = new TaskManagement();
+            if (!string.IsNullOrEmpty(taskno)) man.UpdateTask(taskno, "结束", "", taskID);
+
             sunwoda.Complete(task);
         }
         [WebMethod]
@@ -636,6 +718,17 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                 }
                 result.MSG = count.ToString();
             }
+            if (task.DEPT.ToUpper()== "SMART FURNITURE")
+            {
+                List<SmartFurnitureSCUD> sfs = new List<SmartFurnitureSCUD>();
+                sfs = JsonConvert.DeserializeObject<List<SmartFurnitureSCUD>>(info);
+                int count = scud.CheckInBySmartFurniture(sfs, task);
+                if (count > 0)
+                {
+                    result.RESULT = "success";
+                }
+                result.MSG = count.ToString();
+            }
             string json = JsonConvert.SerializeObject(result);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
@@ -655,13 +748,13 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             Context.Response.End();
         }
         [WebMethod]
-        public void SCUD_SEND(string handle)
+        public void SCUD_SEND(string handle, string taskno)
         {
             SCUDTask task = new SCUDTask();
             SyncSCUD scud = new SyncSCUD();
             task = scud.GetTask(handle);
-            int total = scud.SyncData(ref task);
-            SCUD_Result result = new SCUD_Result();
+            int total = scud.SyncData(task);
+            ResultTransfer result = new ResultTransfer();
             if (total == task.TOTAL)
             {
                 scud.UpdateTask(ref task, "准备就绪");
@@ -669,6 +762,8 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                 if ("成功" == task.STATE)
                 {
                     result.RESULT = "success";
+                    TaskManagement man = new TaskManagement();
+                    if (!string.IsNullOrEmpty(taskno)) man.UpdateTask(taskno, "结束", "", handle);
                 }
             }
             else
@@ -781,6 +876,7 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             if (count > 0)
             {
                 tws.UpdateTask(task, "准备就绪");
+
                 count = tws.SendData(task);
             }
             task = tws.UpdateTask(task, "完成");
@@ -788,6 +884,17 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
             Context.Response.Write(count);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void TWS_ITEM()
+        {
+            SyncTWS tws = new SyncTWS();
+            List<Item_no> result = tws.Item_no();
+            string json = JsonConvert.SerializeObject(result);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(json);
             Context.Response.End();
         }
         [WebMethod]
@@ -852,18 +959,36 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
                 sfcList.Add(str);
             }
             Tasks task = management.CreateTask(sfcList, category, item_no, customer, created_user, customer2, customer2_id);
-            task = management.CreateSchedule(task, "DAILY_CHECK");
+            task = management.CreateSchedule(task, "启动");
+            if (task != null)
+            {
+                string emails = null;
+                List<EmailInfo> emailList = management.GetEmails(task.HANDLE_CUSTOMER);
+                foreach(EmailInfo info in emailList)
+                {
+                    emails += info.EMAIL + ";";
+                }
+                LSMES_5ANEW_PLUS.WebService.email.email mail = new email.email();
+                mail.TaskNotice(emails, task.HANDLE);
+            }
             string json = JsonConvert.SerializeObject(task);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
             Context.Response.Write(json);
             Context.Response.End();
         }
-        [WebMethod]
-        public void UpdateSyncTask(string handle_task,string status,string updated_user)
+        /// <summary>
+        /// 回传任务状态更新（回传平台）
+        /// </summary>
+        /// <param name="handle_task">回传管理任务编号</param>
+        /// <param name="status">状态</param>
+        /// <param name="updated_user">更新人</param>
+        /// <param name="taskno">各客户实际回传任务编号</param>
+        [WebMethod]        
+        public void UpdateSyncTask(string handle_task,string status,string updated_user,string taskno)
         {
             TaskManagement management = new TaskManagement();
-            Tasks task = management.UpdateTask(handle_task, status, updated_user);
+            Tasks task = management.UpdateTask(handle_task, status, updated_user, taskno);
             string json = JsonConvert.SerializeObject(task);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
@@ -989,10 +1114,10 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             Context.Response.End();
         }
         [WebMethod]
-        public void GetTasks(string datetime, string tray, string barcode)
+        public void GetTasks(string datetime, string tray, string barcode, string customer, string taskno)
         {
             TaskManagement man = new TaskManagement();
-            List<Tasks> result = man.GetTasks(datetime, tray, barcode);
+            List<Tasks> result = man.GetTasks(datetime, tray, barcode, customer, taskno);
             string json = JsonConvert.SerializeObject(result);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
@@ -1012,7 +1137,7 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             }
             pallet = pallet.Substring(0, pallet.Length - 1);
             DataIntegration data = new DataIntegration();
-            DataTable mDt = data.CreateData(task.ITEM_NO, pallet);
+            DataTable mDt = data.CreateData(task.ITEM_NO, pallet, task.SN);
             string json = JsonConvert.SerializeObject(mDt);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
@@ -1110,16 +1235,229 @@ namespace LSMES_5ANEW_PLUS.WebService.SyncRemote
             Context.Response.Write(json);
             Context.Response.End();
         }
+        //[WebMethod]
+        //public void GetSyncData(string item, string pallet)
+        //{
+        //    DataIntegration man = new DataIntegration();
+        //    DataTable dt = man.CreateData(item, pallet);
+        //    string json = JsonConvert.SerializeObject(dt);
+        //    Context.Response.Charset = "UTF-8";
+        //    Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+        //    Context.Response.Write(json);
+        //    Context.Response.End();
+        //}
         [WebMethod]
-        public void GetSyncData(string item, string pallet)
+        public void GetSyncData(string taskno)
         {
             DataIntegration man = new DataIntegration();
-            DataTable dt = man.CreateData(item, pallet);
+            Hashtable pallets = man.GetPalletInfoByTaskNo(taskno);
+            if (pallets == null) return;
+            string item = null;
+            string palletStr = null;
+            foreach(DictionaryEntry entry in pallets)
+            {
+                item = entry.Value.ToString();
+                palletStr += entry.Key.ToString() + ",";
+            }
+            palletStr = palletStr.Substring(0, palletStr.Length - 1);
+            DataTable dt = man.CreateData(item, palletStr, taskno);          
             string json = JsonConvert.SerializeObject(dt);
+            TaskManagement mman = new TaskManagement();
+            mman.UpdateTask(taskno, "确认中", "ADMIN_Z", "");
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
             Context.Response.Write(json);
             Context.Response.End();
         }
+        [WebMethod]
+        public void CompleteSyncTask(string taskno)
+        {
+            if (string.IsNullOrEmpty(taskno)) return;
+            TaskManagement man = new TaskManagement();
+            man.Completed(taskno);
+            ResultTask result = new ResultTask();
+            result.RESULT = "success";
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 获取用户信息
+        /// </summary>
+        /// <param name="username"></param>
+        /// <param name="email"></param>
+        [WebMethod]
+        public void GetUserInfo(string username,string email)
+        {
+            TaskManagement man = new TaskManagement();
+            List<UsersInfos> result = man.GetUsers(username, email);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 获取客户信息
+        /// </summary>
+        /// <param name="customer"></param>
+        [WebMethod]
+        public void GetCustomerInfo(string customer)
+        {
+            TaskManagement man = new TaskManagement();
+            List<CUSTOMERS> result = man.GetCustomers(customer);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 获取用户与客户间绑定关系
+        /// </summary>
+        /// <param name="customer"></param>
+        /// <param name="user"></param>
+        [WebMethod]
+        public void GetEmailGroup(string customer,string user)
+        {
+            TaskManagement man = new TaskManagement();
+            List<EMAIL_GROUP> result = man.GetEmailGroup(customer, user);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 新建客户
+        /// </summary>
+        /// <param name="customer"></param>
+        [WebMethod]
+        public void AddCustomer(string customer)
+        {
+            TaskManagement man = new TaskManagement();
+            ResultTask result = man.AddCustomer(customer);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 新建用户
+        /// </summary>
+        /// <param name="info"></param>
+        [WebMethod]
+        public void AddUser(string info)
+        {
+            TaskManagement man = new TaskManagement();
+            UsersInfos user = JsonConvert.DeserializeObject<UsersInfos>(info);
+            ResultTask result = man.AddUser(user);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 新建用户与客户绑定关系
+        /// </summary>
+        /// <param name="handle_customer"></param>
+        /// <param name="handle_user"></param>
+        [WebMethod]
+        public void AddGroup(string handle_customer, string handle_user)
+        {
+            TaskManagement man = new TaskManagement();
+            ResultTask result = man.AddGroup(handle_customer, handle_user);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        /// <summary>
+        /// 解除客户与用户间的绑定关系
+        /// </summary>
+        /// <param name="handle_customer"></param>
+        /// <param name="handle_user"></param>
+        [WebMethod]
+        public void DelGroup(string handle_customer, string handle_user)
+        {
+            TaskManagement man = new TaskManagement();
+            ResultTask result = man.DelGroup(handle_customer, handle_user);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        ////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////// 安克（Anker）数据回传/ //////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////
+        [WebMethod]
+        public void Anker_CreateTask(string file)
+        {
+            AnkerTask task = new AnkerTask();
+            SyncAnker anker = new SyncAnker();
+            task = anker.CreateTask(file);
+            if (task != null)
+            {
+                TokenAnker token = anker.InitToken(task);
+                if(token.res_code == 1)
+                    anker.UpdateToken(token.data.token);
+            }
+            string json = JsonConvert.SerializeObject(task);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(json);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Anker_CheckIn(string info, string handle_task)
+        {
+            AnkerTask task = new AnkerTask();
+            SyncAnker anker = new SyncAnker();
+            task = anker.GetTask(handle_task);
+            List<BatteryAnker> batterys = JsonConvert.DeserializeObject<List<BatteryAnker>>(info);
+            int count = anker.CheckIn(batterys, task);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(count);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Anker_Ready(string handle)
+        {
+            AnkerTask task = new AnkerTask();
+            SyncAnker anker = new SyncAnker();
+            task = anker.GetTask(handle);
+            anker.UpdateTask(task, "准备就绪", 0);
+        }
+        [WebMethod]
+        public void Anker_Send(string handle, string taskno)
+        {
+            AnkerTask task = new AnkerTask();
+            SyncAnker anker = new SyncAnker();
+            task = anker.GetTask(handle);
+            int total = anker.CreateSendInfo(task);
+            ResultTransfer result = new ResultTransfer();
+            if (total == task.TOTAL)
+            {
+                anker.BackupSyncbattery(task);
+                anker.SendData(ref task);
+                task = anker.GetTask(handle);
+                if ("成功" == task.STATE)
+                {
+                    result.RESULT = "success";
+                    TaskManagement man = new TaskManagement();
+                    if (!string.IsNullOrEmpty(taskno)) man.UpdateTask(taskno, "结束", "", handle);
+                }
+            }
+            else
+            {
+                result.RESULT = "fail";
+            }
+            string json = JsonConvert.SerializeObject(result);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(json);
+            Context.Response.End();
+        }
+
     }
+
 }

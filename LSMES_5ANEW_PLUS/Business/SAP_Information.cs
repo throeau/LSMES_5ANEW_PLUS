@@ -666,7 +666,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     StringBuilder sql = new StringBuilder();
                     for (int i = 0; i < mDt.Rows.Count; ++i)
                     {
-                        sql.Append("INSERT INTO AMAZON_KAZAM_PACK (HANDLE_CONFIG,PACK_PLT_NO,PACK_SHP_DATE,PACK_SHP_NO,PACK_CTN_NO,PACK_SHP_TIME,PACK_LOT_NO,BATTERY_SN,CELL_SN,PCM_SN,PACK_OCV,PACK_ACR,PACK_TDOC,PACK_DOC,PACK_TSC,PACK_SRV,PACK_TCOC,PACK_COC,PACK_LGTH,PACK_WDTH,PACK_THK,PCM_OVP1,PCM_OVR1,PCM_UVP1,PCM_UVR1,PCM_COC1,PCM_DOC1,PCM_TOVP1,PCM_TUVP1,PCM_TCOC1,PCM_TDOC1,PCM_TSC1,PCM_PC,PCM_PDC,PCM_IMP) VALUES (");
+                        sql.Append("INSERT INTO AMAZON_KAZAM_PACK (HANDLE_CONFIG,PACK_PLT_NO,PACK_SHP_DATE,PACK_SHP_NO,PACK_CTN_NO,PACK_SHP_TIME,PACK_LOT_NO,BATTERY_SN,CELL_SN,PCM_SN,PACK_OCV,PACK_ACR,PACK_TDOC,PACK_DOC,PACK_TSC,PACK_SRV,PACK_TCOC,PACK_COC,PACK_LGTH,PACK_WDTH,PACK_THK,PCM_OVP1,PCM_OVR1,PCM_UVP1,PCM_UVR1,PCM_COC1,PCM_DOC1,PCM_TOVP1,PCM_TUVP1,PCM_TCOC1,PCM_TDOC1,PCM_TSC1,PCM_PC,PCM_PDC,PCM_IMP,PCM_TIME,PACK_TIME) VALUES (");
                         sql.Append("'");
                         sql.Append(handle);
                         sql.Append("','");
@@ -737,6 +737,10 @@ namespace LSMES_5ANEW_PLUS.Business
                         sql.Append(mDt.Rows[i]["PCM_PDC"]);
                         sql.Append("','");
                         sql.Append(mDt.Rows[i]["PCM_IMP"]);
+                        sql.Append("','");
+                        sql.Append(mDt.Rows[i]["PCM_TIME"]);
+                        sql.Append("','");
+                        sql.Append(mDt.Rows[i]["PACK_TIME"]);
                         sql.Append("');");
                     }
                     comm.CommandText = sql.ToString();
@@ -911,7 +915,19 @@ namespace LSMES_5ANEW_PLUS.Business
                 return result;
             }
         }
+        /// <summary>
+        /// 保存向 KAZAM 发送的 JSON 信息
+        /// </summary>
+        /// <param name="json"></param>
+        /// <returns></returns>
+        //public static ResultAmazon BackupSendInfo(string json)
+        //{
+        //    using (SqlConnection conn = new SqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SyncRemote"].ConnectionString))
+        //    {
+        //        ResultAmazon result = new ResultAmazon();
 
+        //    }
+        //}
         /// <summary>
         /// 获取指定电池全部参数
         /// </summary>
@@ -929,7 +945,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SAP_Information::SyncBatteryData => Database can not be opened.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT SUPPLIER,PROJECT,PHASE,'LISHEN' FACTORY_ID,PACK_PLT_NO,PACK_SHP_NO,PACK_SHP_DATE,PACK_CTN_NO,PACK_SHP_TIME,PACK_LOT_NO,UPPER(BATTERY_SN) BATTERY_SN,CELL_SN CELL1_SN,PCM_SN,CAST(PACK_OCV AS NUMERIC(18,4))/1000 PACK_OCV,PACK_ACR,PACK_TDOC,PACK_DOC,PACK_TSC,PACK_SRV,PACK_TCOC,PACK_COC,PACK_LGTH,PACK_WDTH,PACK_THK,CAST(PCM_OVP1 AS NUMERIC(18,4))/1000 PCM_OVP1,CAST(PCM_OVR1 AS NUMERIC(18,4))/1000 PCM_OVR1,CAST(PCM_UVP1 AS NUMERIC(18,4))/1000 PCM_UVP1,CAST(PCM_UVR1 AS NUMERIC(18,4))/1000 PCM_UVR1,CAST(PCM_COC1 AS NUMERIC(18,4))/1000 PCM_COC1,CAST(PCM_DOC1 AS NUMERIC(18,4))/1000 PCM_DOC1,CAST(PCM_TOVP1 AS NUMERIC(18,4))/1000 PCM_TOVP1,PCM_TUVP1,PCM_TCOC1,PCM_TDOC1,PCM_TSC1,PCM_PC,PCM_PDC,PCM_IMP FROM AMAZON_KAZAM_PACK K INNER JOIN AMAZON_CONFIG C ON K.HANDLE_CONFIG = C.HANDLE AND C.STATE = 'Y' AND K.STATE = 'Y' WHERE BATTERY_SN = '{0}';", barcode), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT SUPPLIER,PROJECT,PHASE,'LISHEN' FACTORY_ID,PACK_PLT_NO,PACK_SHP_NO,PACK_SHP_DATE,PACK_CTN_NO,PACK_SHP_TIME,PACK_LOT_NO,UPPER(BATTERY_SN) BATTERY_SN,CELL_SN CELL1_SN,PCM_SN,CAST(PACK_OCV AS NUMERIC(18,4))/1000 PACK_OCV,PACK_ACR,PACK_TDOC,PACK_DOC,PACK_TSC,PACK_SRV,PACK_TCOC,PACK_COC,PACK_LGTH,PACK_WDTH,PACK_THK,CAST(PCM_OVP1 AS NUMERIC(18,4))/1000 PCM_OVP1,CAST(PCM_OVR1 AS NUMERIC(18,4))/1000 PCM_OVR1,CAST(PCM_UVP1 AS NUMERIC(18,4))/1000 PCM_UVP1,CAST(PCM_UVR1 AS NUMERIC(18,4))/1000 PCM_UVR1,CAST(PCM_COC1 AS NUMERIC(18,4))/1000 PCM_COC1,CAST(PCM_DOC1 AS NUMERIC(18,4))/1000 PCM_DOC1,CAST(PCM_TOVP1 AS NUMERIC(18,4))/1000 PCM_TOVP1,PCM_TUVP1,PCM_TCOC1,PCM_TDOC1,PCM_TSC1,PCM_PC,PCM_PDC,PCM_IMP,PCM_TIME,PACK_TIME FROM AMAZON_KAZAM_PACK K INNER JOIN AMAZON_CONFIG C ON K.HANDLE_CONFIG = C.HANDLE AND C.STATE = 'Y' AND K.STATE = 'Y' WHERE BATTERY_SN = '{0}';", barcode), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     reader.Read();
                     for (int i = 0; i < reader.FieldCount; ++i)
@@ -978,6 +994,7 @@ namespace LSMES_5ANEW_PLUS.Business
                         entity.Value = reader[i].ToString();
                         result.Add(entity);
                     }
+                    reader.Close();
                 }
                 catch (Exception ex)
                 {
@@ -1046,7 +1063,7 @@ namespace LSMES_5ANEW_PLUS.Business
                         barcode = barcode.Substring(0, barcode.Length - 1);
                     }
 
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT P.*,C.FACTORY_ID FROM AMAZON_KAZAM_PACK P INNER JOIN AMAZON_CONFIG C ON P.HANDLE_CONFIG = C.HANDLE WHERE PACK_PLT_NO IN ({0}) OR PACK_CTN_NO IN ({0});", barcode), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT P.*,C.FACTORY_ID FROM AMAZON_KAZAM_PACK P INNER JOIN AMAZON_CONFIG C ON P.HANDLE_CONFIG = C.HANDLE WHERE P.STATE = 'Y' AND PACK_PLT_NO IN ({0}) OR PACK_CTN_NO IN ({0});", barcode), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     DataTable mDt = new DataTable();
                     mDt.Load(reader);
@@ -1095,11 +1112,11 @@ namespace LSMES_5ANEW_PLUS.Business
                     reader.Read();
                     if (reader[0].ToString() == "BOX")
                     {
-                        comm.CommandText = string.Format("SELECT DISTINCT ZPM.MODEL ITEM_NO,'' PACK_PLT_NO,'' PACK_SHP_DATE,ZPM.NUM PACK_CTN_NO,ZPM.CREATED_DATE_TIME PACK_SHP_TIME,'' PACK_LOT_NO,'' PACK_SHP_NO,ZPM3.NUM_ID BATTERY_SN,ZPM3.NUM CELL_SN,ZOSP2.PCM_0001 PCM_SN,ZOSP.A002 PACK_OCV,ZOSP.A003 PACK_ACR,ZOSP.A010 PACK_TDOC,ZOSP.A011 PACK_DOC,ZOSP.A018 PACK_TSC,ZOSP.A019 PACK_SRV,ZOSP.A021 PACK_TCOC,ZOSP.A022 PACK_COC,ZOSP3.A002 PACK_LGTH,ZOSP3.A003 PACK_WDTH,ZOSP3.A004 PACK_THK,ZPD.PCM_OVP1,ZPD.PCM_OVR1,ZPD.PCM_UVP1,ZPD.PCM_UVR1,ZPD.PCM_COC1,ZPD.PCM_DOC1,ZPD.PCM_TOVP1,ZPD.PCM_TUVP1,ZPD.PCM_TCOC1,ZPD.PCM_TDOC1,ZPD.PCM_TSC1,ZPD.PCM_PC,ZPD.PCM_PDC,ZPD.PCM_IMP FROM Z_PACK_MASTER zpm INNER JOIN Z_PACK_MASTER zpm2 ON ZPM.HANDLE = ZPM2.REF_OBJ AND ZPM.NUM = {0} INNER JOIN Z_PACK_MASTER zpm3 ON ZPM2.HANDLE = ZPM3.REF_OBJ INNER JOIN Z_SFC_EXTEND ZSE ON ZSE.SCAN_SN = ZPM3.NUM_ID AND ZSE.IS_CURRENT = 'Y' AND ZSE.IS_CURRENT = 'Y' AND ZSE.STATUS = 'Y' AND ZSE.IS_PACK = 'Y' INNER JOIN Z_OP42_SFC_PARAM ZOSP ON ZOSP.SFC = ZSE.SFC AND ZOSP.IS_CURRENT = 'Y' INNER JOIN Z_OP36_SFC_PARAM ZOSP2 ON ZOSP2.SFC = ZSE.SFC AND ZOSP2.IS_CURRENT = 'Y' INNER JOIN Z_OP41_SFC_PARAM ZOSP3 ON ZOSP3.SFC = ZSE.SFC AND ZOSP3.IS_CURRENT = 'Y' LEFT JOIN Z_PCM_DATA ZPD ON ZOSP2.PCM_0001 = ZPD.PCM_SN;", boxid);
+                        comm.CommandText = string.Format("SELECT DISTINCT ZPM.MODEL ITEM_NO,'' PACK_PLT_NO,'' PACK_SHP_DATE,ZPM.NUM PACK_CTN_NO,ZPM.CREATED_DATE_TIME PACK_SHP_TIME,'' PACK_LOT_NO,'' PACK_SHP_NO,ZPM3.NUM_ID BATTERY_SN,ZPM3.NUM CELL_SN,ZOSP2.PCM_0001 PCM_SN,ZOSP.A002 PACK_OCV,ZOSP.A003 PACK_ACR,ZOSP.A010 PACK_TDOC,ZOSP.A011 PACK_DOC,ZOSP.A018 PACK_TSC,ZOSP.A019 PACK_SRV,ZOSP.A021 PACK_TCOC,ZOSP.A022 PACK_COC,ZOSP3.A002 PACK_LGTH,ZOSP3.A003 PACK_WDTH,ZOSP3.A004 PACK_THK,ZPD.PCM_OVP1,ZPD.PCM_OVR1,ZPD.PCM_UVP1,ZPD.PCM_UVR1,ZPD.PCM_COC1,ZPD.PCM_DOC1,ZPD.PCM_TOVP1,ZPD.PCM_TUVP1,ZPD.PCM_TCOC1,ZPD.PCM_TDOC1,ZPD.PCM_TSC1,ZPD.PCM_PC,ZPD.PCM_PDC,ZPD.PCM_IMP ,ZPD.PCM_TIME ,ZOSP.CREATED_DATE_TIME PACK_TIME FROM Z_PACK_MASTER zpm INNER JOIN Z_PACK_MASTER zpm2 ON ZPM.HANDLE = ZPM2.REF_OBJ AND ZPM.NUM = {0} INNER JOIN Z_PACK_MASTER zpm3 ON ZPM2.HANDLE = ZPM3.REF_OBJ INNER JOIN Z_SFC_EXTEND ZSE ON ZSE.SCAN_SN = ZPM3.NUM_ID AND ZSE.IS_CURRENT = 'Y' AND ZSE.IS_CURRENT = 'Y' AND ZSE.STATUS = 'Y' AND ZSE.IS_PACK = 'Y' INNER JOIN Z_OP42_SFC_PARAM ZOSP ON ZOSP.SFC = ZSE.SFC AND ZOSP.IS_CURRENT = 'Y' INNER JOIN Z_OP36_SFC_PARAM ZOSP2 ON ZOSP2.SFC = ZSE.SFC AND ZOSP2.IS_CURRENT = 'Y' INNER JOIN Z_OP41_SFC_PARAM ZOSP3 ON ZOSP3.SFC = ZSE.SFC AND ZOSP3.IS_CURRENT = 'Y' LEFT JOIN Z_PCM_DATA ZPD ON ZOSP2.PCM_0001 = ZPD.PCM_SN;", boxid);
                     }
                     else if (reader[0].ToString() == "TRAY")
                     {
-                        comm.CommandText = string.Format("SELECT DISTINCT ZPM.MODEL ITEM_NO ,ZPM.NUM PACK_PLT_NO,'' PACK_SHP_DATE ,ZPM2.NUM PACK_CTN_NO ,ZPM.CREATED_DATE_TIME PACK_SHP_TIME ,'' PACK_LOT_NO ,'' PACK_SHP_NO ,ZPM4.NUM_ID BATTERY_SN ,ZPM4.NUM CELL_SN ,ZOSP2.PCM_0001 PCM_SN ,ZOSP.A002 PACK_OCV ,ZOSP.A003 PACK_ACR ,ZOSP.A010 PACK_TDOC ,ZOSP.A011 PACK_DOC ,ZOSP.A018 PACK_TSC ,ZOSP.A019 PACK_SRV ,ZOSP.A021 PACK_TCOC ,ZOSP.A022 PACK_COC ,ZOSP3.A002 PACK_LGTH ,ZOSP3.A003 PACK_WDTH ,ZOSP3.A004 PACK_THK ,ZPD.PCM_OVP1 ,ZPD.PCM_OVR1 ,ZPD.PCM_UVP1 ,ZPD.PCM_UVR1 ,ZPD.PCM_COC1 ,ZPD.PCM_DOC1 ,ZPD.PCM_TOVP1 ,ZPD.PCM_TUVP1 ,ZPD.PCM_TCOC1 ,ZPD.PCM_TDOC1 ,ZPD.PCM_TSC1 ,ZPD.PCM_PC ,ZPD.PCM_PDC ,ZPD.PCM_IMP FROM Z_PACK_MASTER zpm INNER JOIN Z_PACK_MASTER zpm2 ON ZPM.HANDLE = ZPM2.REF_OBJ AND ZPM.NUM = {0} INNER JOIN Z_PACK_MASTER zpm3 ON ZPM2.HANDLE = ZPM3.REF_OBJ INNER JOIN Z_PACK_MASTER zpm4 ON ZPM3.HANDLE = ZPM4.REF_OBJ INNER JOIN Z_SFC_EXTEND ZSE ON ZSE.SCAN_SN = ZPM4.NUM_ID AND ZSE.IS_CURRENT = 'Y' AND ZSE.IS_CURRENT = 'Y' AND ZSE.STATUS = 'Y' AND ZSE.IS_PACK = 'Y' INNER JOIN Z_OP42_SFC_PARAM ZOSP ON ZOSP.SFC = ZSE.SFC AND ZOSP.IS_CURRENT = 'Y' INNER JOIN Z_OP36_SFC_PARAM ZOSP2 ON ZOSP2.SFC = ZSE.SFC AND ZOSP2.IS_CURRENT = 'Y' INNER JOIN Z_OP41_SFC_PARAM ZOSP3 ON ZOSP3.SFC = ZSE.SFC AND ZOSP3.IS_CURRENT = 'Y' LEFT JOIN Z_PCM_DATA ZPD ON ZOSP2.PCM_0001 = ZPD.PCM_SN;", boxid);
+                        comm.CommandText = string.Format("SELECT DISTINCT ZPM.MODEL ITEM_NO ,ZPM.NUM PACK_PLT_NO,'' PACK_SHP_DATE ,ZPM2.NUM PACK_CTN_NO ,ZPM.CREATED_DATE_TIME PACK_SHP_TIME ,'' PACK_LOT_NO ,'' PACK_SHP_NO ,ZPM4.NUM_ID BATTERY_SN ,ZPM4.NUM CELL_SN ,ZOSP2.PCM_0001 PCM_SN ,ZOSP.A002 PACK_OCV ,ZOSP.A003 PACK_ACR ,ZOSP.A010 PACK_TDOC ,ZOSP.A011 PACK_DOC ,ZOSP.A018 PACK_TSC ,ZOSP.A019 PACK_SRV ,ZOSP.A021 PACK_TCOC ,ZOSP.A022 PACK_COC ,ZOSP3.A002 PACK_LGTH ,ZOSP3.A003 PACK_WDTH ,ZOSP3.A004 PACK_THK ,ZPD.PCM_OVP1 ,ZPD.PCM_OVR1 ,ZPD.PCM_UVP1 ,ZPD.PCM_UVR1 ,ZPD.PCM_COC1 ,ZPD.PCM_DOC1 ,ZPD.PCM_TOVP1 ,ZPD.PCM_TUVP1 ,ZPD.PCM_TCOC1 ,ZPD.PCM_TDOC1 ,ZPD.PCM_TSC1 ,ZPD.PCM_PC ,ZPD.PCM_PDC ,ZPD.PCM_IMP ,ZPD.PCM_TIME ,ZOSP.CREATED_DATE_TIME PACK_TIME FROM Z_PACK_MASTER zpm INNER JOIN Z_PACK_MASTER zpm2 ON ZPM.HANDLE = ZPM2.REF_OBJ AND ZPM.NUM = {0} INNER JOIN Z_PACK_MASTER zpm3 ON ZPM2.HANDLE = ZPM3.REF_OBJ INNER JOIN Z_PACK_MASTER zpm4 ON ZPM3.HANDLE = ZPM4.REF_OBJ INNER JOIN Z_SFC_EXTEND ZSE ON ZSE.SCAN_SN = ZPM4.NUM_ID AND ZSE.IS_CURRENT = 'Y' AND ZSE.IS_CURRENT = 'Y' AND ZSE.STATUS = 'Y' AND ZSE.IS_PACK = 'Y' INNER JOIN Z_OP42_SFC_PARAM ZOSP ON ZOSP.SFC = ZSE.SFC AND ZOSP.IS_CURRENT = 'Y' INNER JOIN Z_OP36_SFC_PARAM ZOSP2 ON ZOSP2.SFC = ZSE.SFC AND ZOSP2.IS_CURRENT = 'Y' INNER JOIN Z_OP41_SFC_PARAM ZOSP3 ON ZOSP3.SFC = ZSE.SFC AND ZOSP3.IS_CURRENT = 'Y' LEFT JOIN Z_PCM_DATA ZPD ON ZOSP2.PCM_0001 = ZPD.PCM_SN;", boxid);
                     }
                     else
                     {
@@ -1288,12 +1305,40 @@ namespace LSMES_5ANEW_PLUS.Business
                 }
             }
         }
+        public static Hashtable AmazonProject2()
+        {
+            using (SqlConnection conn = new SqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SyncRemote"].ConnectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SAP_Information::AmazonProject => Database can not be opened.");
+                    }
+                    SqlCommand comm = new SqlCommand("SELECT PROJECT,HANDLE,PTYPE FROM AMAZON_CONFIG;", conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    Hashtable project = new Hashtable();
+                    while (reader.Read())
+                    {
+                        project.Add(reader["PROJECT"].ToString() + "_" + reader["PTYPE"].ToString(), reader["HANDLE"]);
+                    }
+                    return project;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+
         /// <summary>
         /// 获取参数清单
         /// </summary>
         /// <param name="project"></param>
         /// <returns></returns>
-        public static List<AmazonParameter> AmazonParameters(string item_no)
+        public static List<AmazonParameter> AmazonParameters(string item)
         {
             using (SqlConnection conn = new SqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SyncRemote"].ConnectionString))
             {
@@ -1304,7 +1349,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SAP_Information::AmazonParameters => Database can not be opened.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT AC.ITEM_NO,AC.PROJECT,ACA.ITEM,ACA.LSL,ACA.USL,ACA.UNIT,ACA.ISEMPTY FROM AMAZON_CONFIG ac INNER JOIN AMAZON_CONFIG_ADDITION aca ON AC.HANDLE = ACA.HANDLE_CONFIG WHERE AC.ITEM_NO = '{0}' OR AC.MODEL = '{0}';", item_no), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT AC.ITEM_NO,AC.PROJECT,ACA.ITEM,ACA.LSL,ACA.USL,ACA.UNIT,ACA.ISEMPTY,ACA.EQUAL FROM AMAZON_CONFIG ac INNER JOIN AMAZON_CONFIG_ADDITION aca ON AC.HANDLE = ACA.HANDLE_CONFIG WHERE AC.ITEM_NO = '{0}';", item), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     if (!reader.HasRows) throw new Exception("SAP_Information::AmazonParameters => Parameters is empty.");
                     List<AmazonParameter> parameterList = new List<AmazonParameter>();
@@ -1318,6 +1363,7 @@ namespace LSMES_5ANEW_PLUS.Business
                         para.UNIT = reader["UNIT"].ToString();
                         para.ISEMPTY = reader["ISEMPTY"].ToString();
                         para.PROJECT = reader["PROJECT"].ToString();
+                        para.EQUAL = reader["EQUAL"].ToString();
                         parameterList.Add(para);
                     }
                     return parameterList;
@@ -1327,6 +1373,41 @@ namespace LSMES_5ANEW_PLUS.Business
                     SysLog log = new SysLog(ex.Message);
                     return null;
                 }
+            }
+        }
+        /// <summary>
+        /// 获取计算列
+        /// </summary>
+        /// <param name="op"></param>
+        /// <returns></returns>
+        public static Hashtable CalculateColumn(string line, string op)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(line)) line = "SAP_ME_WJ1";
+                using (OdbcConnection conn = new OdbcConnection(System.Configuration.ConfigurationManager.ConnectionStrings[line].ConnectionString))
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("Hana Database can not be opened.");
+                    }
+                    OdbcCommand comm = new OdbcCommand($"SELECT COLUMN_NAME ,COLUMN_DESC FROM Z_CO_CALCULATE_COLUMN WHERE OPERATION = '{op}' ;", conn);
+                    using (OdbcDataReader reader = comm.ExecuteReader())
+                    {
+                        Hashtable hashColumns = new Hashtable();
+                        while (reader.Read())
+                        {
+                            hashColumns.Add(reader["COLUMN_DESC"], reader["COLUMN_NAME"]);
+                        }
+                        return hashColumns;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return null;
             }
         }
     }

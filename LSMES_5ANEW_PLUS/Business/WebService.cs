@@ -11,6 +11,9 @@ using System.Collections;
 using System.Web;
 using Newtonsoft.Json;
 using System.Data.SqlClient;
+using System.Data;
+using System.Web.UI.WebControls.WebParts;
+
 
 namespace LSMES_5ANEW_PLUS.App_Base
 {
@@ -97,22 +100,34 @@ namespace LSMES_5ANEW_PLUS.App_Base
                 }
             }
         }
-        public string Sunwoda_QuerySoapWebService(string url, string pars,int threshold = 0)
+        public string Sunwoda_QuerySoapWebService(string url, string pars, int threshold = 0, string token = null)
         {
             //定义调用Web Service的HttpWebRequest对象
             HttpWebRequest request = (HttpWebRequest)HttpWebRequest.Create(url);
+            if (!string.IsNullOrEmpty(token)) request.Headers.Add("Authorization", $"Bearer {token}");
             try
             {
-                //设置Content-Type
-                request.ContentType = "application/x-www-form-urlencoded";
+                byte[] data = null;
+                if (string.IsNullOrEmpty(token))
+                {
+                    //设置Content-Type
+                    request.ContentType = "application/x-www-form-urlencoded";
+                    //将待发送内容转换为byte[]
+                    data = EncodePars("jsonData=" + pars);
+                }
+                else
+                {
+                    //设置Content-Type
+                    request.ContentType = "application/json";
+                    //将待发送内容转换为byte[]
+                    data = EncodePars(pars);
+                }
                 //设置发送方式POST/GET
                 request.Method = "POST";
                 //设置身份授权为默认
                 request.Credentials = CredentialCache.DefaultCredentials;
                 //设置超时为300000ms
                 request.Timeout = 300000;
-                //将待发送内容转换为byte[]
-                byte[] data = EncodePars("jsonData=" + pars);
                 //发送内容至web service
                 WriteRequestData(request, data);
                 //返回web service XML对象
@@ -123,10 +138,11 @@ namespace LSMES_5ANEW_PLUS.App_Base
                 /*----------------------------------获取服务器端返回的异常信息--------------------------------------*/
                 try
                 {
-                    if (ex.Message == "操作超时" && threshold < 5 )
+                    if (!string.IsNullOrEmpty(ex.Message) && threshold <= 5 )
                     {
                         SysLog _log = new SysLog(string.Format("Sunwoda_QuerySoap {0}，重试第 {1} 次.", ex.Message, threshold));
-                        return Sunwoda_QuerySoapWebService(url, pars, ++threshold);
+                        Thread.Sleep(5000);
+                        return Sunwoda_QuerySoapWebService(url, pars, ++threshold, token);
                     }
                     using (HttpWebResponse res = (HttpWebResponse)ex.Response)
                     {
@@ -144,6 +160,26 @@ namespace LSMES_5ANEW_PLUS.App_Base
                 }
                 return null;
             }
+        }
+        public string Sunwoda_TokenQuerySoapWebService(string url, string paras)
+        {
+            //定义调用Web Service的HttpWebRequest对象
+            HttpWebRequest request = (HttpWebRequest)HttpWebRequest.Create(url);
+            //设置Content-Type
+            request.ContentType = "application/json";
+            //设置发送方式POST/GET
+            request.Method = "POST";
+            //设置身份授权为默认
+            request.Credentials = CredentialCache.DefaultCredentials;
+            //设置超时为300000ms
+            request.Timeout = 300000;
+            //将待发送内容转换为byte[]
+            //byte[] data = EncodePars("jsonData=");
+            //发送内容至web service
+            byte[] data = EncodePars(paras);
+            WriteRequestData(request, data);
+            //返回web service XML对象
+            return Sunwoda_ReadJsonResponse(request.GetResponse());
         }
         public SCUD_ResponseResult SCUD_QuerySoapWebService(string url, string pars)
         {
@@ -178,6 +214,62 @@ namespace LSMES_5ANEW_PLUS.App_Base
                 SysLog log = new SysLog(ex.Message + " $ 服务器端返回异常信息：" + remoteMessage);
                 return null;
             }
+        }
+        public ResultSmartFurnitureSCUD SCUD_QuerySoapWebApi(string url, string pars)
+        {
+            //定义调用Web Service的HttpWebRequest对象
+            HttpWebRequest request = (HttpWebRequest)HttpWebRequest.Create(url);
+            try
+            {
+                //设置Content-Type
+                //request.ContentType = "application/json"; //直接发送SMP方式
+                request.ContentType = "application/json";//直接发送LSN方式
+                //设置发送方式POST/GET
+                request.Method = "POST";
+                //设置身份授权为默认
+                request.Credentials = CredentialCache.DefaultCredentials;
+                //设置超时为300000ms
+                request.Timeout = 300000;
+                //将待发送内容转换为byte[]
+                byte[] data = EncodePars(pars);
+                //发送内容至web service
+                WriteRequestData(request, data);
+                //返回web service XML对象(直接发送LSN方式)
+                return SCUD_ReadResponseBySmartFurniture(request.GetResponse());
+            }
+            catch (WebException ex)
+            {
+                /*----------------------------------获取服务器端返回的异常信息--------------------------------------*/
+                HttpWebResponse res = (HttpWebResponse)ex.Response;
+                Stream ErrorResponseStream = res.GetResponseStream();
+                StreamReader ErrorStreamReader = new StreamReader(ErrorResponseStream, Encoding.UTF8);
+                string remoteMessage = ErrorStreamReader.ReadToEnd();
+                ErrorStreamReader.Close();
+                SysLog log = new SysLog(ex.Message + " $ 服务器端返回异常信息：" + remoteMessage);
+                return null;
+            }
+        }
+        public ResultSmartFurnitureSCUD SCUD_ReadResponseBySmartFurniture(WebResponse response)
+        {
+            string retJson = null;
+            SMP_ResponseResult result = new SMP_ResponseResult();
+            try
+            {
+                using (StreamReader sr = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                {
+                    retJson = sr.ReadToEnd();
+                    ResultSmartFurnitureSCUD ret = JsonConvert.DeserializeObject<ResultSmartFurnitureSCUD>(retJson);
+                    ret.HANDLE_RECIEVED = SCUD_ResponseLog(retJson);
+                    sr.Close();
+                    return ret;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog("SmartFurnitureSCUD_ReadJsonResponse：" + ex.Message);
+                return null;
+            }
+
         }
         /// <summary>
         /// Zebra 数据回传
@@ -783,6 +875,106 @@ namespace LSMES_5ANEW_PLUS.App_Base
             catch (Exception ex)
             {
                 SysLog log = new SysLog("TWS_ReadResponse：" + ex.Message);
+                return null;
+            }
+        }
+        public string Anker__QuerySoapWebApiToken(AnkerTask task)
+        {
+            System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13; // 根据需要选择合适的版本
+            LoginAnker login = new LoginAnker();
+            login.account = task.APPID;
+            login.password = task.SECRET;
+            string paras = JsonConvert.SerializeObject(login);
+
+            //定义调用Web Service的HttpWebRequest对象
+            HttpWebRequest request = (HttpWebRequest)HttpWebRequest.Create(task.URI_TOKEN);
+            try
+            {
+
+                //设置Content-Type
+                request.ContentType = "application/json"; //直接发送 TWS 方式
+                //request.ContentType = "application/x-www-form-urlencoded";//直接发送LSN方式
+                //设置发送方式POST/GET
+                request.Method = "POST";
+                //设置身份授权为默认
+                request.Credentials = CredentialCache.DefaultCredentials;
+                //设置超时为300000ms
+                request.Timeout = 300000;
+                //将待发送内容转换为byte[]
+                byte[] data = EncodePars(paras);
+                //发送内容至web service
+                WriteRequestData(request, data);
+                //直接发送 TWS 后，接收 TWS 返回值
+                return Anker_ReadResponse(request.GetResponse());
+            }
+            catch (WebException ex)
+            {
+                /*----------------------------------获取服务器端返回的异常信息--------------------------------------*/
+                HttpWebResponse res = (HttpWebResponse)ex.Response;
+                Stream ErrorResponseStream = res.GetResponseStream();
+                StreamReader ErrorStreamReader = new StreamReader(ErrorResponseStream, Encoding.UTF8);
+                string remoteMessage = ErrorStreamReader.ReadToEnd();
+                ErrorStreamReader.Close();
+                SysLog log2 = new SysLog(ex.Message + " $ 服务器端返回异常信息：" + remoteMessage);
+                return null;
+            }
+        }
+        public string Anker__QuerySoapWebApi(AnkerTask task,string paras)
+        {
+            System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13; // 根据需要选择合适的版本
+
+            //定义调用Web Service的HttpWebRequest对象
+            HttpWebRequest request = (HttpWebRequest)HttpWebRequest.Create(task.URI);
+            try
+            {
+                request.Headers.Add("jwt", task.TOKEN);
+                //设置Content-Type
+                request.ContentType = "application/json"; //直接发送 TWS 方式
+                //request.ContentType = "application/x-www-form-urlencoded";//直接发送LSN方式
+                //设置发送方式POST/GET
+                request.Method = "POST";
+                //设置身份授权为默认
+                request.Credentials = CredentialCache.DefaultCredentials;
+                //设置超时为300000ms
+                request.Timeout = 300000;
+                //将待发送内容转换为byte[]
+                byte[] data = EncodePars(paras);
+                //发送内容至web service
+                WriteRequestData(request, data);
+                //直接发送 TWS 后，接收 TWS 返回值
+                return Anker_ReadResponse(request.GetResponse());
+            }
+            catch (WebException ex)
+            {
+                /*----------------------------------获取服务器端返回的异常信息--------------------------------------*/
+                HttpWebResponse res = (HttpWebResponse)ex.Response;
+                Stream ErrorResponseStream = res.GetResponseStream();
+                StreamReader ErrorStreamReader = new StreamReader(ErrorResponseStream, Encoding.UTF8);
+                string remoteMessage = ErrorStreamReader.ReadToEnd();
+                ErrorStreamReader.Close();
+                SysLog log2 = new SysLog(ex.Message + " $ 服务器端返回异常信息：" + remoteMessage);
+                return null;
+            }
+        }
+        private string Anker_ReadResponse(WebResponse response)
+        {
+            try
+            {
+                using (StreamReader sr = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                {
+                    string retJson = sr.ReadToEnd();
+                    sr.Close();
+                    response.Close();
+                    if (string.IsNullOrEmpty(retJson))
+                    {
+                        throw new Exception("Result is empty.");
+                    }
+                    return retJson;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog("Anker_ReadResponse：" + ex.Message);
                 return null;
             }
         }

@@ -293,6 +293,26 @@ namespace LSMES_5ANEW_PLUS.WebService.ort
             Context.Response.End();
         }
         [WebMethod]
+        public void ReportSampleDataByBarcode(string info)
+        {
+            string sfc = JsonConvert.DeserializeObject<string>(Base64Helper.Base64Decode(info));
+            string result = Base64Helper.Base64Encode(JsonConvert.SerializeObject(ORT.GetSampleDataByBarcode(sfc)));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(result);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void ReportSampleVoltageByBarcode(string info)
+        {
+            string sfc = JsonConvert.DeserializeObject<string>(Base64Helper.Base64Decode(info));
+            string result = Base64Helper.Base64Encode(JsonConvert.SerializeObject(ORT.GetSamplePerformanceByBarcode(sfc)));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(result);
+            Context.Response.End();
+        }
+        [WebMethod]
         public void ReportCycleDataBySFC(string info)
         {
             SfcTask entity = JsonConvert.DeserializeObject<SfcTask>(Base64Helper.Base64Decode(info));
@@ -340,6 +360,90 @@ namespace LSMES_5ANEW_PLUS.WebService.ort
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
             Context.Response.Write(result);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void AutoSamples(string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+            if (string.IsNullOrEmpty(info)) return;
+            List<SampleInfo> samples = ORT.AutoGetSample(info);
+            string result = Base64Helper.Base64Encode(JsonConvert.SerializeObject(samples));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(result);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void GetTestStandard (string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+            if (string.IsNullOrEmpty(info)) return;
+            queryTestStandard entity = JsonConvert.DeserializeObject<queryTestStandard>(info);
+            List<TestStandard> standards = ORT.GetTestStandard(entity.HANDLE_BOM, entity.HANDLE_TYPE);
+            string result = Base64Helper.Base64Encode(JsonConvert.SerializeObject(standards));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(result);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void CreateTestStandards(string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+
+            ResultORT result = new ResultORT();
+            if (string.IsNullOrEmpty(info))  result.Result = "fail";
+            result = ORT.CreateTestStandards(JsonConvert.DeserializeObject<List<TestStandard>>(info));
+            info = Base64Helper.Base64Encode(JsonConvert.SerializeObject(result));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(info);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void GetTestStandardBySample(string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+            queryTestStandard entity = JsonConvert.DeserializeObject<queryTestStandard>(info);
+            List<TestStandard> result = ORT.GetTestStandardBySample(entity.BARCODE, entity.TYPE);
+            info = Base64Helper.Base64Encode(JsonConvert.SerializeObject(result));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(info);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void CreateTestData(string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+            ResultORT result = ORT.CreateTestData(JsonConvert.DeserializeObject<List<TestData>>(info));
+            info = Base64Helper.Base64Encode(JsonConvert.SerializeObject(result));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(info);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void GetThicknessBySFC(string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+            TestData result = ORT.GetThicknessBySFC(info);
+            info = Base64Helper.Base64Encode(JsonConvert.SerializeObject(result));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(info);
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void GetTestTypeBySFC(string info)
+        {
+            info = Base64Helper.Base64Decode(info);
+            TestType result = ORT.GetTestTypeBySFC(info);
+            info = Base64Helper.Base64Encode(JsonConvert.SerializeObject(result));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(info);
             Context.Response.End();
         }
     }

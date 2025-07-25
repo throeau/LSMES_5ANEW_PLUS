@@ -206,6 +206,8 @@ namespace LSMES_5ANEW_PLUS.App_Base
     /// </summary>
     public class TemplateInfo
     {
+        public string BOMNO { set; get; }
+        public string INSPECTION_ITEM { set; get; }
         public string HANDLE { set; get; }
         public string TEMPLATE_NAME { set; get; }
         public string VERSION { set; get; }
@@ -258,6 +260,7 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string BOMNO { set; get; }
         public string ITEM { set; get; }
         public string TEMPLATE { set; get; }
+        public string VERSION { set; get; }
         public string CREATOR { set; get; }
     }
     /// <summary>
@@ -446,5 +449,98 @@ namespace LSMES_5ANEW_PLUS.App_Base
     {
         public Hashtable SampleDataRow { set; get; }
     }
+    /// <summary>
+    /// 系统自动分配的样本
+    /// </summary>
+    public class AutoSamaples
+    {
+        private Hashtable hashSampleList = new Hashtable();
+        private List<SampleInfo> listSample;
 
+        public void AddSampleList(SampleInfo sample)
+        {
+            if (hashSampleList.ContainsKey(sample.CATALOG))
+            {
+                listSample = (List<SampleInfo>)hashSampleList[sample.CATALOG];
+                listSample.Add(sample);
+                hashSampleList[sample.CATALOG] = listSample;
+            }
+            else
+            {
+                hashSampleList.Add(sample.CATALOG, sample);
+            }
+        }
+        public List<SampleInfo> GetSample(string catalog)
+        {
+            return (List<SampleInfo>)hashSampleList[catalog];
+        }
+
+        public string TASK_CREATED_DATE_TIME { set; get; }
+    }
+    public class SampleInfo
+    {
+        public string CATALOG { set; get; }
+        public string SN { set; get; }
+        public string PRODUCT_BATCH { set; get; }
+        public string SHOP_ORDER { set; get; }
+        public string CREATED_DATE_TIME { set; get; }
+        public string STATE { set; get; }
+    }
+    public class SampleStrategy
+    {
+        public Hashtable CATALOG = new Hashtable();
+        public string CREATED_DATE_TIME { set; get; }
+    }
+    public class TestType
+    {
+        public string HANDLE { set; get; }
+        public string TEST_NAME { set; get; }
+        public string STATE { set; get; }
+        public string CREATED_USER { set; get; }
+        public string CREATED_DATE_TIME { set; get; }
+    }
+    public class TestStandard
+    {
+        public string HANDLE { set; get; }
+        public string HANDLE_TYPE { set; get; }
+        public string HANDLE_BOM { set; get; }
+        public string BOM { set; get; }
+        public string ITEM_NO { set; get; }
+        public string TEST_NAME { set; get; }
+        public string LSL { set; get; }
+        public string USL { set; get; }
+        public string MID { set; get; }
+        public string L_OFFSET { set; get; }
+        public string U_OFFSET { set; get; }
+        public string VERSION { set; get; }
+        public string STATE { set; get; }
+        public string CREATED_USER { set; get; }
+        public string CREATED_DATE_TIME { set; get; }
+        public string TEST_ITEM { set; get; }
+    }
+    public class queryTestStandard
+    {
+        public string HANDLE_BOM { set; get; }
+        public string HANDLE_TYPE { set; get; }
+        public string BARCODE { set; get; }
+        public string TYPE { set; get; }
+    }
+    public class TestData
+    {
+        public string HANDLE { set; get; }
+        public string HANDLE_SFC { set; get; }
+        public string SFC { set; get; }
+        public string THICKNESS { set; get; }
+        public string RESULT_THICKNESS { set; get; }
+        public string VERSION_THICKNESS { set; get; }
+        public string VOLTAGE { set; get; }
+        public string RESULT_VOLTAGE { set; get; }
+        public string VERSION_VOLTAGE { set; get; }
+        public string RESISTANCE { set; get; }
+        public string RESULT_RESISTANCE { set; get; }
+        public string VERSION_RESISTANCE { set; get; }
+        public string CREATED_USER { set; get; }
+        public string CREATED_DATE_TIME { set; get; }
+        public string TEST_TYPE { set; get; }
+    }
 }

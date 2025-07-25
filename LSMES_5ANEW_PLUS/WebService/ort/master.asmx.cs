@@ -115,5 +115,16 @@ namespace LSMES_5ANEW_PLUS.WebService.ort
             Context.Response.Write(result);
             Context.Response.End();
         }
+        [WebMethod]
+        public void GetTestType()
+        {
+            List<TestType> typeList = ORT.GetTestType();
+            string result = Base64Helper.Base64Encode(JsonConvert.SerializeObject(typeList));
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(result);
+            Context.Response.End();
+        }
+
     }
 }

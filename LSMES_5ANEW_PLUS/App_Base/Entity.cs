@@ -2,6 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
+using System.Text;
+using System.Net.NetworkInformation;
+using System.Net;
+using System.Net.Sockets;
 
 namespace LSMES_5ANEW_PLUS.App_Base
 {
@@ -130,6 +134,7 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string barCode { get; set; }
         public string cellSn { get; set; }
         public string productLine { get; set; }
+        public string asnSn { get; set; }
         public string testTime { get; set; }
         //public List<SCUD_testItems> testItemList
         //{
@@ -155,6 +160,8 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public double testValue { get; set; }
         public string testResult { get; set; }
         public string remark { get; set; }
+        public string swdPn { get; set; }
+        public string palletSn { get; set; }
     }
     class SCUD_responseResult
     {
@@ -165,6 +172,11 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string date { get; set; }
         public string data { get; set; }
         public string year { get; set; }
+    }
+    class SUNWODA_responseResult
+    {
+        public int statusCode { get; set; }
+        public string message { get; set; }
     }
     /// <summary>
     /// 客户端上传数据（单体）
@@ -195,12 +207,20 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string result { get; set; }
         public string remark { get; set; }
         public string lotno { get; set; }
+        public string swdpn { get; set; }
+        public string palletsn { get; set; }
+        public string asnsn { get; set; }
+
     }
     class BatteryListSunwoda
     {
         public List<BatterySunwoda> batterys = new List<BatterySunwoda>();
     }
-
+    class TokenSunwoda
+    {
+        public int statusCode { get; set; }
+        public string message { get; set; }
+    }
 
     /******************************************************************************************/
     /************************************** Zebra *********************************************/
@@ -829,6 +849,12 @@ public class TokenResultDesay
     public object userInfo { set; get; }
     public string token { set; get; }
 }
+public class BomDesay
+{
+    public string BOMNO { set; get; }
+    public string REMARK { set; get; }
+    public string VERSION { set; get; }
+}
 /***************************************************************************************************************************************/
 /****************************************************** 闻泰 电池包装信息 2022/10/09 ***************************************************/
 /***************************************************************************************************************************************/
@@ -842,6 +868,37 @@ public class BoxWT
     public string PACKAGEDATE { set; get; }
     public string Description { set; get; }
     public string LOTDATE { set; get; }
+}
+/***************************************************************************************************************************************/
+/****************************************************** Powergene 电池包装信息 2024/7/1 ************************************************/
+/***************************************************************************************************************************************/
+public class BoxPowergene
+{
+    public string PO_NUMBER { set; get; }
+    public string CUSTOMER_PN { set; get; }
+    public string PART_NAME { set; get; }
+    public string TYPE { set; get; }
+    public string CAPACITY_ENERGY { set; get; }
+    public string VERDOR_PN { set; get; }
+    public string VENDOR_CODE { set; get; }
+    public string V_QTY { set; get; }
+    public string ROHS { set; get; }
+    public string VENDOR_NAME { set; get; }
+    public string DATE_CODE { set; get; }
+}
+/***************************************************************************************************************************************/
+/********************************************************* Anker 电池包装信息 2024/7/1 *************************************************/
+/***************************************************************************************************************************************/
+public class BoxAnker
+{
+    public string SUPPLIER_NUMBER { set; get; }
+    public string PO_CUSTOMER { set; get; }
+    public string CUSTOMER_ITEM { set; get; }
+    public string CUSTOMER_ITEM_DESCRIPTION { set; get; }
+    public string QTY { set; get; }
+    public string PRODUCT_DATE { set; get; }
+    public string GROUP_INFO { set; get; }
+    public string NOTE { set; get; }
 }
 /***************************************************************************************************************************************/
 /********************************************************** Hipot 信息 2022/12/09 ******************************************************/
@@ -873,6 +930,7 @@ public class BatteryPowerBankSCUD
     public string CO_ITEM_SPEC { get; set; }
     public string PN_SN { get; set; }
     public string GEAR { get; set; }
+    public string IRValue { get; set; }
 }
 public class BatteryLaptopSCUD
 {
@@ -1004,6 +1062,7 @@ public class Items
 }
 public class DataSources
 {
+    private string handle_item;
     public string HANDLE { get; set; }
     public string HANDLE_ITEM { get; set; }
     public string ITEM { get; set; }
@@ -1039,3 +1098,347 @@ public class DataTemplate
     public string CREATED_USER { set; get; }
     public string CREATED_DATE_TIME { set; get; }
 }
+public class StatementsLog
+{
+    private string statement;
+    public string HANDLE { set; get; }
+    public string ITEM { set; get; }
+    public string BOMNO { set; get; }
+    public string STATEMENTS
+    {
+        set
+        {
+            statement = value;
+        }
+        get
+        {
+            return statement.Replace("'", "''");
+        }
+    }
+    public string PIPELINE { set; get; }
+    public string TYPE { set; get; }
+    public string TASKNO { set; get; }
+    public string REMARKS { set; get; }
+    public string CREATED_DATE_TIME { set; get; }
+}
+public class EmailInfo
+{
+    public string CUSTOMER_ID { set; get; }
+    public string CUSTOMER { set; get; }
+    public string USERNAME { set; get; }
+    public string EMAIL { set; get; }
+}
+/// <summary>
+/// 任务管理中的用户信息
+/// </summary>
+public class UsersInfos
+{
+    public string HANDLE { set; get; }
+    public string USERNAME { set; get; }
+    public string PASSWORD { set; get; }
+    public string EMAIL { set; get; }
+    public string DEPT { set; get; }
+    public string STATE { set; get; }
+    public string REMARKS { set; get; }
+    public string CREATED_DATE_TIME { set; get; }
+}
+/// <summary>
+/// 任务管理中的客户信息
+/// </summary>
+public class CUSTOMERS
+{
+    public string HANDLE { set; get; }
+    public string CUSTOMER { set; get; }
+    public string CREATED_DATE_TIME { set; get; }
+}
+/// <summary>
+/// 
+/// </summary>
+public class DATA_SUPPLEMENT
+{
+    public string ITEM_NO { set; get; }
+    public string DATA_TYPE { set; get; }
+    public string QTY { set; get; }
+}
+/// <summary>
+/// 任务管理中的用户与客户绑定关系
+/// </summary>
+public class EMAIL_GROUP
+{
+    public string HANDLE_GROUP;
+    public string HANDLE_CUSTOMER;
+    public string HANDLE_EMAIL;
+    public string CUSTOMER;
+    public string USERNAME;
+}
+public class HtmlTable
+{
+    StringBuilder mTD = new StringBuilder();
+    StringBuilder mTR = new StringBuilder();
+    StringBuilder mTH = new StringBuilder();
+    StringBuilder mTable = new StringBuilder();
+    /// <summary>
+    /// 添加 TD，
+    /// </summary>
+    public string TD
+    {
+        set
+        {
+            mTD.Append(string.Format("<td>{0}</td>", value));
+        }
+        get
+        {
+            return mTD.ToString();
+        }
+    }
+    /// <summary>
+    /// 将若干 TD 添加至 TR 中
+    /// </summary>
+    public string TR
+    {
+        set
+        {
+            mTR.Append(string.Format("<tr>{0}</tr>", value));
+            mTD.Clear();
+        }
+        get
+        {
+            mTD.Clear();
+            return mTR.ToString();
+        }
+    }
+    /// <summary>
+    /// 设置 Title
+    /// </summary>
+    public string Title { set; get; }
+    /// <summary>
+    /// 设置 文本内容
+    /// </summary>
+    public string Context { set; get; }
+    /// <summary>
+    /// 设置 TH
+    /// </summary>
+    public string TH
+    {
+        set
+        {
+            mTH.Append(string.Format("<th>{0}</th>", value));
+        }
+        get
+        {
+            return mTH.ToString();
+        }
+    }
+    /// <summary>
+    /// 导出 Table
+    /// </summary>
+    public string TABLE
+    {
+        set
+        {
+            mTable.Append(string.Format("<p>{0}</p><p>{1}</p><table id=\"table-1\"><thead>{2}</thead><tbody>{3}</tbody></table>", Title, Context, TH, value));
+            mTR.Clear();
+            mTH.Clear();
+        }
+        get
+        {
+            return mTable.ToString();
+        }
+    }
+    /// <summary>
+    /// 导出最终 Html
+    /// </summary>
+    public string Html
+    {
+        get
+        {
+            string table = "<!DOCTYPE html><html><head><meta charset=\"UTF - 8\"><style>#table-1 thead,#table-1 tr {border-top-width: 1px;border-top-style: solid;border-top-color: #98c5e7;}#table-1 {border-bottom-width: 1px;border-bottom-style: solid;border-bottom-color: #98c5e7;}#table-1 th {border-top-width: 1px;border-top-style: solid;border-bottom-width: 1px;border-bottom-style: solid;border-color: #5c729e;padding: 5px 10px;font-size: 12px;font-family: Verdana;}#table-1 td {padding: 5px 10px;font-size: 12px;font-family: Verdana;color: #5c729e;}#table-1 tr:nth-child(even) {background: #d0dae8}#table-1 tr:nth-child(odd) {background: #FFF}</style></head><body>" + TABLE + "</body></html>";
+            mTable.Clear();
+            return table;
+        }
+    }
+}
+/*****************************************************************************************************************************************/
+/********************************************************** Anker 电池信息 2024/04/09 ****************************************************/
+/*****************************************************************************************************************************************/
+public class BatteryAnker
+{
+    public string BARCODE { set; get; }
+    public string OCV1 { set; get; }
+    public string OCV1_TESTTIME { set; get; }
+    public string IR1 { set; get; }
+    public string OCV2 { set; get; }
+    public string OCV2_TESTTIME { set; get; }
+    public string IR2 { set; get; }
+    public string KVALUE { set; get; }
+    public string CAPACITY { set; get; }
+    public string VOLTAGE { set; get; }
+    public string RESISTANCE { set; get; }
+    public string GRADE { set; get; }
+    public string TEST_RESULT { set; get; }
+    public string TEST_TIME { set; get; }
+    public string LOT { set; get; }
+    public string MATERIALS_PO { set; get; }
+    public string MATERIALS_NO { set; get; }
+    public string STATION_ID { set; get; }
+    public string JYL { set; get; }
+    public string VOLTAGE_OCV1 { set; get; }
+    public string RESISTANCE_OCV1 { set; get; }
+    public string TESTTIME_OCV1 { set; get; }
+    public string VOLTAGE_OCV2 { set; get; }
+    public string RESISTANCE_OCV2 { set; get; }
+    public string TESTTIME_OCV2 { set; get; }
+    public string VOLTAGE_SHELL { set; get; }
+    //public string THICKNESS { set; get; }
+    //public string WIDTH { set; get; }
+}
+public class SysItemAnker
+{
+    public string name { set; get; }
+    public string val { set; get; }
+    public int result { set; get; }
+}
+public class ItemsAnker
+{
+    public string bar_code { set; get; }
+    public string type
+    {
+        get
+        {
+            return "电芯";
+        }
+    }
+    public int result
+    {
+        get
+        {
+            return 1;
+        }
+    }
+    public string materials_po { set; get; }
+
+    public string test_time { set; get; }
+    public List<SysItemAnker> data = new List<SysItemAnker>();
+}
+public class SysDataAnker
+{
+    public string request_id
+    {
+        get
+        {
+            return Guid.NewGuid().ToString();
+        }
+    }
+    public string station_id { set; get; }
+    public string material_no { set; get; }
+
+    public List<ItemsAnker> items = new List<ItemsAnker>();
+}
+public class ResultAnker
+{
+    public int res_code { set; get; }
+    public string message { get; set; }
+}
+public class ResultTransfer
+{
+    public string RESULT { set; get; }
+    public string MSG { set; get; }
+    public string CREATED_DATE_TIME
+    {
+        get
+        {
+            return DateTime.Now.ToString();
+        }
+    }
+}
+public class TokenDataAnker
+{
+    public string token { set; get; }
+}
+public class TokenAnker
+{
+    public int res_code { set; get; }
+    public string message { set; get; }
+    public bool need_login { set; get; }
+    public TokenDataAnker data { set; get; }
+}
+public class LoginAnker
+{
+    public string account { set; get; }
+    public string password { set; get; }
+    public string mac 
+    {
+        get
+        {
+            var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
+            foreach (var networkInterface in networkInterfaces)
+            {
+                // 获取物理地址（即MAC地址）
+                PhysicalAddress physicalAddress = networkInterface.GetPhysicalAddress();
+                string macAddress = physicalAddress.ToString();
+                return macAddress;
+            }
+            return null;
+        }
+    }
+    public string ip
+    {
+        get
+        {
+            string localIpAddress = Dns.GetHostEntry(Dns.GetHostName()).AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork)?.ToString();
+            return localIpAddress;
+        }
+    }
+}
+/*****************************************************************************************************************************************/
+/************************************************* 飞毛腿动力 （智能家具）电池信息 2024/04/15 ********************************************/
+/*****************************************************************************************************************************************/
+public class SmartFurnitureSCUD
+{
+    public string sn { set; get; }
+    public string ocvb_voltage { set; get; }
+    public string ocvb_test_time { set; get; }
+    public string ocvb_inter_resi { set; get; }
+    public string capacity { set; get; }
+    public string grade { set; get; }
+    public string k_value { set; get; }
+    public string thickness { set; get; }
+    public string supplier_no { set; get; }
+    public string ocv1 { set; get; }
+    public string ocv1_test_time { set; get; }
+    public string ir1 { set; get; }
+    public string ocv2 { set; get; }
+    public string ocv2_test_time { set; get; }
+    public string ir2 { set; get; }
+    public string test_result { set; get; }
+    public string lot { set; get; }
+}
+public class ResultSmartFurnitureSCUD
+{
+    public string M_RESULT_FLAG { set; get; }
+    public string M_RESULT_MSG { set; get; }
+    public string HANDLE_RECIEVED { set; get; }
+}
+/******************************************************************************************************************************************/
+/********************************************************** 海陆通 电池信息 2024/08/01 ****************************************************/
+/******************************************************************************************************************************************/
+public class BoxHiLT
+{
+    /// <summary>
+    /// 名称
+    /// </summary>
+    public string CORE_TYPE_CODE { set; get; }
+    /// <summary>
+    /// 物料编码
+    /// </summary>
+    public string CUSTOMER_ITEM { set; get; }
+    /// <summary>
+    /// 数量
+    /// </summary>
+    public string QTY { set; get; }
+    /// <summary>
+    /// 日期
+    /// </summary>
+    public string CREATED_DATE_TIME { set; get; }
+}
+

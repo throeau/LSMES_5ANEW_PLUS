@@ -53,5 +53,47 @@ namespace LSMES_5ANEW_PLUS.WebService.Print
                 Context.Response.End();
             }
         }
+        [WebMethod]
+        public void GetPowergeneBoxInfo(string customer,string boxid)
+        {
+            BoxPowergene entity = new BoxPowergene();
+            entity = Datum.GetPowergeneBoxInfo(customer, boxid);
+            if (entity != null)
+            {
+                string result = JsonConvert.SerializeObject(entity);
+                Context.Response.Charset = "UTF-8";
+                Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+                Context.Response.Write(result);
+                Context.Response.End();
+            }
+        }
+        [WebMethod]
+        public void GetAnkerBoxInfo(string customer, string boxid)
+        {
+            BoxAnker entity = new BoxAnker();
+            entity = Datum.GetAnkerBoxInfo(customer, boxid);
+            if (entity != null)
+            {
+                string result = JsonConvert.SerializeObject(entity);
+                Context.Response.Charset = "UTF-8";
+                Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+                Context.Response.Write(result);
+                Context.Response.End();
+            }
+        }
+        [WebMethod]
+        public void GetHiLTBoxInfo(string customer, string boxid)
+        {
+            BoxHiLT entity = new BoxHiLT();
+            entity = Datum.GetHiLTBoxInfo(customer, boxid);
+            if (entity != null)
+            {
+                string result = JsonConvert.SerializeObject(entity);
+                Context.Response.Charset = "UTF-8";
+                Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+                Context.Response.Write(result);
+                Context.Response.End();
+            }
+        }
     }
 }

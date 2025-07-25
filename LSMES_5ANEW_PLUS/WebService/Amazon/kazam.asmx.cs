@@ -275,16 +275,127 @@ namespace LSMES_5ANEW_PLUS.WebService.Amazon
             Context.Response.End();
         }
         /// <summary>
-        /// 获取项目参数
+        /// 获取 Amazon 项目名称
         /// </summary>
-        /// <param name="item_no">项目</param>
         [WebMethod]
-        public void AmazonParameters(string item_no)
+        public void AmazonProject2()
         {
-            List<AmazonParameter> result = SAP_Information.AmazonParameters(item_no);
+            Hashtable result = SAP_Information.AmazonProject2();
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
             Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+
+        /// <summary>
+        /// 获取项目参数
+        /// </summary>
+        /// <param name="type">类型</param>
+        [WebMethod]
+        public void AmazonParameters(string item)
+        {
+            List<AmazonParameter> result = SAP_Information.AmazonParameters(item);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Lines(string info)
+        {
+            AmazonLine line = JsonConvert.DeserializeObject<AmazonLine>(info);
+            Hashtable result = AmazonKazam.Lines(line);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Stations(string info)
+        {
+            AmazonStation station = JsonConvert.DeserializeObject<AmazonStation>(info);
+            Hashtable result = AmazonKazam.Stations(station);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Fixures(string info)
+        {
+            AmazonFixure fixure = JsonConvert.DeserializeObject<AmazonFixure>(info);
+            Hashtable result = AmazonKazam.Fixures(fixure);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void Slots(string info)
+        {
+            AmazonSlot slot = JsonConvert.DeserializeObject<AmazonSlot>(info);
+            Hashtable result = AmazonKazam.Slots(slot);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void AmazonGroups(string project, string type)
+        {
+            List<AmazonGroup> result = AmazonKazam.AmazonGroups(project, type);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void CreateAmazonGroup(string info)
+        {
+            AmazonHandle entity = JsonConvert.DeserializeObject<AmazonHandle>(info);
+            int result = AmazonKazam.CreateAmazonGroup(entity);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void AmazonStandard(string item)
+        {
+            List<AmazonStandard> result = AmazonKazam.AmazonStandard(item);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void AmazonCondition(string project,string type)
+        {
+            Hashtable hashCondition = new Hashtable();
+            hashCondition = AmazonKazam.AmazonConditions(project, type);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(hashCondition));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void AmazonKazamStatistics(string type, string StartDate, string EndDate)
+        {
+            List<AmazonStatistics> statisticsList = AmazonKazam.AmazonKazamStatistics(type, StartDate, EndDate);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(statisticsList));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void AmazonIsValidByBatterySn(string barcode)
+        {
+            Hashtable hashResult = new Hashtable();
+            hashResult.Add(barcode, AmazonKazam.IsValidBatterySn(barcode));
+            SysLog log = new SysLog($"{barcode}:{hashResult[barcode]}");
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(hashResult));
             Context.Response.End();
         }
     }

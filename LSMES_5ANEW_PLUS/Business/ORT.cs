@@ -614,7 +614,7 @@ namespace LSMES_5ANEW_PLUS.Business
             else // 普通字符串
             {
                 //sql = string.Format("select tt.types_task 任务类型,wa.area 取样区域,b.bom_no 型号,b.item_no 料号,ii.inspection_name 测试项目,count(ts.handle) 样本数量 from task t inner join task_details td on t.handle = td.handle_task inner join work_area wa on td.handle_work_area = wa.handle inner join \"bom\" b on td.handle_bom = b.handle inner join operations o on td.handle_operation = o.handle inner join task_types tt on td.handle_types_task = tt.handle inner join task_sample ts on t.handle = ts.handle_task and ts.handle_task_details = td.handle inner join inspection_item ii on td.handle_inspection_item = ii.handle where t.handle = (select handle_task from task_sample where sfc = '{0}') group by tt.types_task,wa.area,b.bom_no,b.item_no,ii.inspection_name;", barcode);
-                sql = string.Format("select t.handle 任务编号,tt.types_task 任务类型,wa.area 取样区域,b.bom_no 型号,b.item_no 料号,ii.inspection_name 测试项目,ii.num 样本数量,ii.phases 阶段 FROM task t INNER JOIN task_details td ON t.handle = td.handle_task INNER JOIN work_area wa ON td.handle_work_area = wa.handle INNER JOIN \"bom\" b ON td.handle_bom = b.handle INNER JOIN task_types tt ON td.handle_types_task = tt.handle INNER JOIN inspection_item ii ON td.handle_inspection_item = ii.handle INNER JOIN task_sample ts ON ts.handle_task = t.handle WHERE sfc = '{0}' and t.state = 'SAMPLING' GROUP BY tt.types_task,wa.area,b.bom_no,b.item_no,ii.inspection_name,t.handle,ii.num ;", barcode);
+                sql = string.Format("select t.handle 任务编号,tt.types_task 任务类型,wa.area 取样区域,b.bom_no 型号,b.item_no 料号,ii.inspection_name 测试项目,ii.num 样本数量,ii.phases 阶段 FROM task t INNER JOIN task_details td ON t.handle = td.handle_task INNER JOIN work_area wa ON td.handle_work_area = wa.handle INNER JOIN \"bom\" b ON td.handle_bom = b.handle INNER JOIN task_types tt ON td.handle_types_task = tt.handle INNER JOIN inspection_item ii ON td.handle_inspection_item = ii.handle INNER JOIN task_sample ts ON ts.handle_task = t.handle WHERE sfc = '{0}' and t.state = 'SAMPLING' GROUP BY tt.types_task,wa.area,b.bom_no,b.item_no,ii.inspection_name,t.handle,ii.num,ii.phases ;", barcode);
 
             }
             using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
@@ -699,7 +699,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         sbr.Append(string.Format("insert into sample_recieve (handle,handle_sample,handle_task_details,state,creator) values ('{0}','{1}','{2}','{3}','{4}');", UuidHelper.NewUuid().ToString(), entity.handle_sample, entity.handle_task_details, "RECIEVED", entity.creator));
                     }
-                    sbr.Append(string.Format("update task set state = 'RECIEVED' where handle = '{0}';", sampleList[0].handle_task));
+                    sbr.Append(string.Format("update task set state = '{1}' where handle = '{0}';", sampleList[0].handle_task, "RECIEVED")); // 20240104 更新，RECIEVED 改为 TESTING；20240802 恢复为 RECIEVED
                     tran = conn.BeginTransaction();
                     NpgsqlCommand comm = new NpgsqlCommand(sbr.ToString(), conn);
                     comm.Transaction = tran;
@@ -1252,15 +1252,19 @@ namespace LSMES_5ANEW_PLUS.Business
             {
                 if (string.IsNullOrEmpty(template.NAME) && !string.IsNullOrEmpty(template.HANDLE))
                 {
-                    sql.Append(string.Format("select * from test_template where handle = '{0}' and is_current = 'Y';", template.HANDLE));
+                    //sql.Append(string.Format("select * from test_template where handle = '{0}' and is_current = 'Y';", template.HANDLE));
+                    sql.Append(string.Format("select * from item_template_group where handle = '{0}' and state = 'Y';", template.HANDLE));
+
                 }
                 else if (string.IsNullOrEmpty(template.HANDLE) && !string.IsNullOrEmpty(template.NAME))
                 {
-                    sql.Append(string.Format("select * from test_template where template_name = '{0}' and is_current = 'Y';", template.NAME));
+                    //sql.Append(string.Format("select * from test_template where template_name = '{0}' and is_current = 'Y';", template.NAME));
+                    sql.Append(string.Format("select * from item_template_group where template_name = '{0}' and state = 'Y';", template.NAME));
                 }
                 else
                 {
-                    sql.Append("select * from test_template where is_current = 'Y';");
+                    //sql.Append("select * from test_template where is_current = 'Y';");
+                    sql.Append("select * from item_template_group where state = 'Y';");
                 }
             }
             using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
@@ -1278,11 +1282,13 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         TemplateInfo result = new TemplateInfo();
+                        result.BOMNO= reader["bom_no"].ToString();
+                        result.INSPECTION_ITEM = reader["inspection_item"].ToString();
                         result.HANDLE = reader["handle"].ToString();
                         result.TEMPLATE_NAME = reader["template_name"].ToString();
                         result.VERSION = reader["z_version"].ToString();
                         result.CREATOR = reader["creator"].ToString();
-                        result.IS_CURRENT = reader["is_current"].ToString();
+                        //result.IS_CURRENT = reader["is_current"].ToString();
                         result.CREATED_DATE_TIME = reader["created_date_time"].ToString();
                         resultList.Add(result);
                     }
@@ -1316,7 +1322,15 @@ namespace LSMES_5ANEW_PLUS.Business
                         throw new Exception("ORT::TemplateSubmit => Unable to connect to ort platform. ");
                     }
                     // 新建 test_template 记录
-                    string sql = string.Format("update test_template set is_current = 'N' where template_name = '{0}'; insert into test_template (template_name,z_version,is_current,creator) values ('{0}','{1}','{2}','{3}') returning handle;", template.TEMPLATE_INFO.TEMPLATE_NAME, template.TEMPLATE_INFO.VERSION, template.TEMPLATE_INFO.IS_CURRENT, template.TEMPLATE_INFO.CREATOR);
+                    //string sql = string.Format("update test_template set is_current = 'N' where template_name = '{0}'; insert into test_template (template_name,z_version,is_current,creator) values ('{0}','{1}','{2}','{3}') returning handle;", template.TEMPLATE_INFO.TEMPLATE_NAME, template.TEMPLATE_INFO.VERSION, template.TEMPLATE_INFO.IS_CURRENT, template.TEMPLATE_INFO.CREATOR);
+                    string sql = string.Format("update item_template_group set state = 'N' where template_name = '{0}'; insert into item_template_group (bom_no,inspection_item,template_name,z_version,state,creator) values ('{0}','{1}','{2}','{3}','{4}','{5}') returning handle;"
+                        ,template.TEMPLATE_INFO.BOMNO
+                        ,template.TEMPLATE_INFO.INSPECTION_ITEM
+                        , template.TEMPLATE_INFO.TEMPLATE_NAME
+                        , template.TEMPLATE_INFO.VERSION
+                        , 'Y'
+                        , template.TEMPLATE_INFO.CREATOR
+                        );
                     NpgsqlTransaction tran = conn.BeginTransaction();
                     NpgsqlCommand comm = new NpgsqlCommand(sql, conn);
                     comm.Transaction = tran;
@@ -1498,6 +1512,17 @@ namespace LSMES_5ANEW_PLUS.Business
                     return result;
                 }
             }
+        }
+        /// <summary>
+        /// 判定循环数据
+        /// </summary>
+        /// <param name="mDt"></param>
+        /// <param name="barcode"></param>
+        /// <param name="creator"></param>
+        public static void JudgeCycle(DataTable mDt, string barcode, string creator)
+        {
+            if (mDt == null || string.IsNullOrEmpty(barcode)) return;
+
         }
         public static string GetHandleTaskDetails(string sfc)
         {
@@ -1868,6 +1893,61 @@ namespace LSMES_5ANEW_PLUS.Business
                 }
             }
         }
+        /// <summary>
+        /// 查询百度数据
+        /// </summary>
+        /// <param name="sfc"></param>
+        /// <returns></returns>
+        public static DataTable GetSampleDataByBarcode(string sfc)
+        {
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                conn.Open();
+                ResultORT result = new ResultORT();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetSampleDataByBarcode => Unable to connect to ort platform. ");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select ts.sfc 样本编号,thickness 厚度,result_thickness 测试结果,version_thickness 标准版本,created_user 测试人,ta.created_date_time 上传时间 from test_appearance ta inner join task_sample ts on ta.handle_sfc = ts.handle where ts.sfc = '{0}' order by ta.created_date_time desc;", sfc), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    DataTable mDt = new DataTable();
+                    mDt.Load(reader);
+                    return mDt;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        public static DataTable GetSamplePerformanceByBarcode(string sfc)
+        {
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                conn.Open();
+                ResultORT result = new ResultORT();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetSamplePerformanceByBarcode => Unable to connect to ort platform. ");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select ts.sfc 样本编号,voltage 电压,result_voltage 电压测试结果,version_voltage 标准版本,resistance 内阻,result_resistance 内阻测试结果,version_resistance 标准版本,created_user 测试人,tp.created_date_time 上传时间 from test_performance tp inner join task_sample ts on tp .handle_sfc = ts.handle where ts.sfc = '{0}' order by tp.created_date_time desc;", sfc), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    DataTable mDt = new DataTable();
+                    mDt.Load(reader);
+                    return mDt;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
         public static DataTable GetCycleDataBySFC(string sfc, string handle_task)
         {
             using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
@@ -2095,6 +2175,446 @@ namespace LSMES_5ANEW_PLUS.Business
                         sample.STATE = "不合格品";
                     }
                     return sample;
+                }
+            }
+        }
+        /// <summary>
+        /// 根据样本策略实际取样本从SAP_PACK数据库
+        /// </summary>
+        /// <param name="handle_task">任务 handle</param>
+        /// <returns></returns>
+        public static List<SampleInfo> AutoGetSample(string handle_task)
+        {
+            SampleStrategy sampleStrategy = GetAutoStrategy(handle_task);
+            try
+            {
+                if (sampleStrategy == null)
+                {
+                    throw new Exception("ORT::AutoGetSample => fail to get sample strategy. ");
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return null;
+            }
+            using (OdbcConnection conn = new OdbcConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SAP_PACK"].ConnectionString))
+            {
+                conn.Open();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::AutoGetSample => fail to open database. ");
+                    }
+                    string sql = null;
+                    if (System.Configuration.ConfigurationManager.AppSettings["CURRENT"].ToString().ToUpper() == "TRUE")
+                    {
+                        sql = string.Format("SELECT SN,REMARKS,PRODUCT_BATCH,SHOP_ORDER FROM Z_ORT_SAMPLING WHERE CREATED_DATE_TIME > '{0} 08:00:00' AND CREATED_DATE_TIME < ADD_DAYS('{0} 08:00:00',1)	AND IS_VALID = 'Y';", sampleStrategy.CREATED_DATE_TIME);
+                    }
+                    else
+                    {
+                        sql = "SELECT SN,REMARKS,PRODUCT_BATCH,SHOP_ORDER FROM Z_ORT_SAMPLING WHERE IS_VALID = 'Y';";
+                    }
+
+                    OdbcCommand comm = new OdbcCommand(sql, conn);
+                    OdbcDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("ORT::AutoGetSample => There is no suitable data in Z_ORT_SAMPLING.");
+                    //AutoSamaples sampleList = new AutoSamaples();
+                    List<SampleInfo> sampleList = new List<SampleInfo>();
+                    Hashtable catalog = new Hashtable();
+                    while (reader.Read())
+                    {
+                        if (!catalog.ContainsKey(reader["REMARKS"]) || Convert.ToInt32(catalog[reader["REMARKS"]]) < Convert.ToInt32(sampleStrategy.CATALOG[reader["REMARKS"]]))
+                        {
+                            SampleInfo sample = new SampleInfo();
+                            sample.CATALOG = reader["REMARKS"].ToString();
+                            sample.PRODUCT_BATCH = reader["PRODUCT_BATCH"].ToString();
+                            sample.SHOP_ORDER = reader["SHOP_ORDER"].ToString();
+                            sample.SN = reader["SN"].ToString();
+                            sampleList.Add(sample);
+                            UpdateSampleStateOfSAP(sample.SN);
+                            if (!catalog.ContainsKey(reader["REMARKS"]))
+                            {
+                                catalog.Add(reader["REMARKS"], 1);
+                            }
+                            else
+                            {
+                                int count = Convert.ToInt32(catalog[reader["REMARKS"]]);
+                                ++count;
+                                catalog[reader["REMARKS"]] = count;
+                            }
+                        }
+                    }
+                    reader.Close();
+                    return sampleList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 更新 Z_ORT_SAMPLING 码号状态为 N，即已完成取样，不能再取
+        /// </summary>
+        /// <param name="sn">码号</param>
+        public static void UpdateSampleStateOfSAP(string sn)
+        {
+            using (OdbcConnection conn = new OdbcConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SAP_PACK"].ConnectionString))
+            {
+                conn.Open();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::UpdateSampleStateOfSAP => fail to open database. ");
+                    }
+                    OdbcCommand comm = new OdbcCommand(string.Format("UPDATE Z_ORT_SAMPLING SET IS_VALID = 'N' WHERE SN = '{0}';", sn), conn);
+                    comm.ExecuteNonQuery();
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                }
+            }
+        }
+        /// <summary>
+        /// 获取该任务各类测试项目所需的样本数量
+        /// </summary>
+        /// <param name="handle_task">任务 handle</param>
+        /// <returns></returns>
+        public static SampleStrategy GetAutoStrategy(string handle_task)
+        {
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetAutoStrategy => fail to open database.");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select ii.inspection_name,ii.num,to_char(t.created_date_time,'YYYY-MM-DD') created_date_time from task t inner join task_details td on t.handle = td.handle_task inner join inspection_item ii on td.handle_inspection_item = ii.handle where t.handle = '{0}';", handle_task), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("Auto strategy is not exist.");
+                    SampleStrategy samples = new SampleStrategy();
+                    while (reader.Read())
+                    {
+                        samples.CATALOG.Add(reader["inspection_name"], reader["num"]);
+                        samples.CREATED_DATE_TIME = reader["created_date_time"].ToString();
+                    }
+                    reader.Close();
+                    return samples;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 获取测试类型
+        /// </summary>
+        /// <param name="item_no">料号</param>
+        /// <returns></returns>
+        public static List<TestType> GetTestType()
+        {
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetTestType => fail to open database.");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select * from test_type where state = 'Y';"), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("ORT::GetTestType => test_type no data is available.");
+                    List<TestType> typeList = new List<TestType>();
+                    while (reader.Read())
+                    {
+                        TestType entity = new TestType();
+                        entity.HANDLE = reader["handle"].ToString();
+                        entity.TEST_NAME = reader["test_name"].ToString();
+                        entity.STATE = reader["state"].ToString();
+                        entity.CREATED_USER = reader["created_user"].ToString();
+                        entity.CREATED_DATE_TIME = reader["created_date_time"].ToString();
+                        typeList.Add(entity);
+                    }
+                    reader.Close();
+                    return typeList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 创建新测试标准
+        /// </summary>
+        /// <param name="entityList">标准清单</param>
+        /// <returns>创建成功的数量</returns>
+        public static ResultORT CreateTestStandards(List<TestStandard> entityList)
+        {
+            ResultORT result = new ResultORT();
+            if (entityList == null)
+            {
+                result.Result = "fail";
+                result.Informations = "paramers is empty";
+            }
+            StringBuilder sql = new StringBuilder();
+            for (int i = 0; i < entityList.Count; ++i)
+            {
+                if (string.IsNullOrEmpty(entityList[i].HANDLE_TYPE)) continue;
+                if (string.IsNullOrEmpty(entityList[i].HANDLE)) // 新建标准
+                {
+                    sql.Append(string.Format("update test_standard set state = 'N' where state = 'Y' and handle_type = '{0}';insert into test_standard (handle_type,lsl,mid,usl,state,version,created_user,handle_bom,loffset,uoffset) values ('{0}','{1}','{2}','{3}','{4}',(select max(version) from (select case when version is not null then max(cast(version as INTEGER)) + 1 else '1' end as version from test_standard where handle_type = '{0}' group by version) a),'{5}','{6}','{7}','{8}');", entityList[i].HANDLE_TYPE, entityList[i].LSL, entityList[i].MID, entityList[i].USL, entityList[i].STATE, entityList[i].CREATED_USER, entityList[i].HANDLE_BOM, entityList[i].L_OFFSET, entityList[i].U_OFFSET));
+                }
+            }
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                conn.Open();
+                NpgsqlTransaction tran = conn.BeginTransaction();
+                try
+                {
+
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::CreateTestStandards => fail to open database.");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(sql.ToString(), conn);
+                    comm.Transaction = tran;
+                    comm.ExecuteNonQuery();
+                    tran.Commit();
+                    result.Result = "success";
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    tran.Rollback();
+                    result.Result = "fail";
+                    result.Informations = ex.Message;
+                }
+            }
+            return result;
+        }
+        /// <summary>
+        /// 获取测试标准
+        /// </summary>
+        /// <param name="item_no">物料编号</param>
+        /// <returns></returns>
+        public static List<TestStandard> GetTestStandard(string handle_bom, string handle_type)
+        {
+            if (string.IsNullOrEmpty(handle_bom) || string.IsNullOrEmpty(handle_type)) return null;
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetTestStandard => fail to open database.");
+                    }
+                    string sql = null;
+                    if (!string.IsNullOrEmpty(handle_bom) && !string.IsNullOrEmpty(handle_type))
+                    {
+                        sql = string.Format("select b.bom_no,b.item_no,tt.test_name,ts.* from bom b inner join test_standard ts on b.handle = ts.handle_bom inner join test_type tt on ts.handle_type = tt.handle where b.handle = '{0}' and ts.handle_type = '{1}' order by ts.created_date_time asc;", handle_bom, handle_type);
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(sql, conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("ORT::GetTestStandard => standard information does not exist.");
+                    List<TestStandard> entityList = new List<TestStandard>();
+                    while (reader.Read())
+                    {
+                        TestStandard entity = new TestStandard();
+                        entity.HANDLE = reader["handle"].ToString();
+                        entity.HANDLE_TYPE = reader["handle_type"].ToString();
+                        entity.HANDLE_BOM = reader["handle_bom"].ToString();
+                        entity.LSL = reader["lsl"].ToString();
+                        entity.MID = reader["mid"].ToString();
+                        entity.USL = reader["usl"].ToString();
+                        entity.STATE = reader["state"].ToString();
+                        entity.L_OFFSET = reader["loffset"].ToString();
+                        entity.U_OFFSET = reader["uoffset"].ToString();
+                        entity.VERSION = reader["version"].ToString();
+                        entity.CREATED_USER = reader["created_user"].ToString();
+                        entity.CREATED_DATE_TIME = reader["created_date_time"].ToString();
+                        entity.BOM = reader["bom_no"].ToString();
+                        entity.ITEM_NO = reader["item_no"].ToString();
+                        entity.TEST_NAME = reader["test_name"].ToString();
+                        entityList.Add(entity);
+                    }
+                    reader.Close();
+                    return entityList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        public static List<TestStandard> GetTestStandardBySample(string barcode, string type)
+        {
+            if (string.IsNullOrEmpty(barcode) || string.IsNullOrEmpty(type)) return null;
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetTestStandardBySample => fail to open database.");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select ts2.handle,ts2.lsl,ts2.mid,ts2.usl,ts2.version,tt.test_name,ts2.uoffset,ts2.loffset,ii.inspection_name  from task_sample ts inner join task_details td on ts.handle_task_details = td.handle inner join test_standard ts2 on td.handle_bom = ts2.handle_bom inner join inspection_item ii on td.handle_inspection_item = ii.handle  inner join test_type tt on ts2.handle_type = tt.handle where tt.test_name in ('{1}') and ts2.state = 'Y' and ts.sfc = '{0}';", barcode, type), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("Test standard data is empty.");
+                    List<TestStandard> standardList = new List<TestStandard>();
+                    while (reader.Read())
+                    {
+                        TestStandard entity = new TestStandard();
+                        entity.HANDLE = reader["handle"].ToString();
+                        entity.LSL = reader["lsl"].ToString();
+                        entity.MID = reader["mid"].ToString();
+                        entity.USL = reader["usl"].ToString();
+                        entity.VERSION = reader["version"].ToString();
+                        entity.TEST_NAME = reader["test_name"].ToString();
+                        entity.U_OFFSET = reader["uoffset"].ToString();
+                        entity.L_OFFSET = reader["loffset"].ToString();
+                        entity.TEST_ITEM = reader["inspection_name"].ToString();
+                        standardList.Add(entity);
+                    }
+                    reader.Close();
+                    return standardList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        public static ResultORT CreateTestData(List<TestData> entitys)
+        {
+            ResultORT result = new ResultORT();
+            if (entitys == null)
+            {
+                result.Result = "fail";
+                result.Informations = "Test data is null";
+            }
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                conn.Open();
+                NpgsqlTransaction tran = conn.BeginTransaction();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::CreateTestData => fail to open database.");
+                    }
+                    //string sql = null;
+                    StringBuilder sql = new StringBuilder();
+                    foreach (TestData entity in entitys)
+                    {
+                        if (!string.IsNullOrEmpty(entity.RESULT_THICKNESS))
+                        {
+                            sql.Append(string.Format("insert into test_appearance (handle_sfc,thickness,result_thickness,version_thickness,created_user,test_type) values ((select handle from task_sample ts where sfc = '{0}' order by created_date_time desc limit 1),'{1}','{2}','{3}','{4}','{5}');", entity.SFC, entity.THICKNESS, entity.RESULT_THICKNESS, entity.VERSION_THICKNESS, entity.CREATED_USER, entity.TEST_TYPE));
+                        }
+                        if (!string.IsNullOrEmpty(entity.RESULT_VOLTAGE) || !string.IsNullOrEmpty(entity.RESULT_RESISTANCE))
+                        {
+                            sql.Append(string.Format("insert into test_performance (handle_sfc,voltage,result_voltage,version_voltage,resistance,result_resistance,version_resistance,created_user) values ((select handle from task_sample ts where sfc = '{0}' order by created_date_time desc limit 1),'{1}','{2}','{3}','{4}','{5}','{6}','{7}');", entity.SFC, entity.VOLTAGE, entity.RESULT_VOLTAGE, entity.VERSION_VOLTAGE, entity.RESISTANCE, entity.RESULT_RESISTANCE, entity.VERSION_RESISTANCE, entity.CREATED_USER));
+                        }
+
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(sql.ToString(), conn);
+                    comm.Transaction = tran;
+                    if (comm.ExecuteNonQuery() > 0)
+                    {
+                        result.Result = "success";
+                        tran.Commit();
+                    }
+                    else
+                    {
+                        result.Result = "fail";
+                        tran.Rollback();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    result.Result = "fail";
+                    tran.Rollback();
+                }
+            }
+            return result;
+        }
+        public static TestData GetThicknessBySFC(string sfc)
+        {
+            if (string.IsNullOrEmpty(sfc)) return null;
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                conn.Open();
+                NpgsqlTransaction tran = conn.BeginTransaction();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::CreateTestData => fail to open database.");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select ta.handle,ta.handle_sfc,ts.sfc,ta.thickness,ta.result_thickness,ta.version_thickness,ta.created_user,ta.created_date_time from test_appearance ta inner join task_sample ts on ts.handle = ta.handle_sfc inner join test_standard ts2 on ta.version_thickness = ts2.version where ts.sfc = '{0}' order by created_date_time desc limit 1;", sfc), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) return null;
+                    TestData result = new TestData();
+                    while (reader.Read())
+                    {
+                        result.HANDLE = reader["handle"].ToString();
+                        result.HANDLE_SFC = reader["handle_sfc"].ToString();
+                        result.SFC = reader["sfc"].ToString();
+                        result.THICKNESS = reader["thickness"].ToString();
+                        result.RESULT_THICKNESS = reader["result_thickness"].ToString();
+                        result.VERSION_THICKNESS = reader["version_thickness"].ToString();
+                        result.CREATED_USER = reader["created_user"].ToString();
+                        result.CREATED_DATE_TIME = reader["created_date_time"].ToString();
+                    }
+                    reader.Close();
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        public static TestType GetTestTypeBySFC(string sfc)
+        {
+            using (NpgsqlConnection conn = new NpgsqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["ORT"].ConnectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("ORT::GetTestTypeBySFC => fail to open database.");
+                    }
+                    NpgsqlCommand comm = new NpgsqlCommand(string.Format("select inspection_name from task_sample ts inner join task_details td ON ts.handle_task_details = td.handle inner join inspection_item ii on td.handle_inspection_item = ii.handle where ts.sfc = '{0}' order by ts.created_date_time desc limit 1;", sfc), conn);
+                    NpgsqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("ORT::GetTestTypeBySFC => inspection_name no data is available.");
+                    TestType result = new TestType();
+                    result.TEST_NAME = reader["inspection_name"].ToString();
+                    reader.Close();
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
                 }
             }
         }

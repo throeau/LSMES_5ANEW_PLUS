@@ -44,7 +44,7 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string ptype { set; get; }
         public string state { set; get; }
         public string comments { set; get; }
-        public string created_date_time { set; get; } 
+        public string created_date_time { set; get; }
     }
     public class EntityAmazonPerformanceCell
     {
@@ -102,5 +102,105 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string USL { get; set; }
         public string UNIT { get; set; }
         public string ISEMPTY { get; set; }
+        public string EQUAL { get; set; }
+    }
+    public class AmazonLine
+    {
+        public string HANDLE { get; set; }
+
+        public string LINE { get; set; }
+        public string CREATED_DATE_TIME { get; set; }
+        public string CREATED_USER { get; set; }
+    }
+    public class AmazonStation
+    {
+        public string HANDLE { get; set; }
+
+        public string STATION { get; set; }
+        public string CREATED_DATE_TIME { get; set; }
+        public string CREATED_USER { get; set; }
+    }
+    public class AmazonFixure
+    {
+        public string HANDLE { get; set; }
+
+        public string FIXTURE { get; set; }
+        public string CREATED_DATE_TIME { get; set; }
+        public string CREATED_USER { get; set; }
+    }
+    public class AmazonSlot
+    {
+        public string HANDLE { get; set; }
+
+        public string SLOT { get; set; }
+        public string CREATED_DATE_TIME { get; set; }
+        public string CREATED_USER { get; set; }
+    }
+    public class AmazonHandle
+    {
+        public string HANDLE { get; set; }
+        public string HANDLE_CONFIG { get; set; }
+        public string HANDLE_LINE { get; set; }
+        public string HANDLE_STATION { get; set; }
+        public string HANDLE_FIXURE { get; set; }
+        public string HANDLE_SLOT { get; set; }
+        public string STATE { get; set; }
+        public string CREATED_USER { get; set; }
+        public string CREATED_DATE_TIME { get; set; }
+    }
+    public class AmazonGroup
+    {
+        public string HANDLE { get; set; }
+        public string ITEM_NO { get; set; }
+        public string FACTORY_ID { get; set; }
+        public string SUPPLIER { get; set; }
+        public string PROJECT { get; set; }
+        public string MODEL { get; set; }
+        public string PHASE { get; set; }
+        public string PTYPE { get; set; }
+        public string STATE { get; set; }
+        public string COMMENTS { get; set; }
+        public string EMAIL { get; set; }
+        public string CONTACT { get; set; }
+        public string LINE { get; set; }
+        public string STATION { get; set; }
+        public string FIXTRUE { get; set; }
+        public string SLOT { get; set; }
+    }
+    public class AmazonStandard
+    {
+        public string HANDLE { get; set; }
+        public string ITEM { get; set; }
+        public string TEST_NAME { get; set; }
+        public string HIGH_LIMIT { get; set; }
+        public string LOW_LIMIT { get; set; }
+        public string UNIT { get; set; }
+        public string VERBO { get; set; }
+        public string STATE { get; set; }
+        public string CREATED_USER { get; set; }
+        public string CREATED_DATE_TIME { get; set; }
+    }
+    public class AmazonCondition
+    {
+        public double LSL { get; set; }
+        public double USL { get; set; }
+        public string UNIT { get; set; }
+        public string ISEMPTY { get; set; }
+        public string EQUAL { get; set; }
+    }
+    /// <summary>
+    /// 统计 amazon kazam 回传情况
+    /// </summary>
+    public class AmazonStatistics
+    {
+        public string Supplier { get; set; }
+        public string Project { get; set; }
+        public string Station { get; set; }
+        public string StartDate { get; set; }
+        public string EndDate { get; set; }
+        public string Units { get; set; }
+        public string KazamImplement { get; set; }
+        public string Remark { get; set; }
+
     }
 }

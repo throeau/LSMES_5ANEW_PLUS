@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web;
 using System.Text;
+using System.Configuration;
 
 namespace LSMES_5ANEW_PLUS.App_Base
 {
@@ -26,6 +27,8 @@ namespace LSMES_5ANEW_PLUS.App_Base
         /// <returns></returns>
         public static string Base64Encode(Encoding encodeType, string source)
         {
+            if (ConfigurationManager.AppSettings["base64"].Trim().ToUpper() != "TRUE") return source;
+
             string encode = string.Empty;
             byte[] bytes = encodeType.GetBytes(source);
             try
@@ -46,6 +49,8 @@ namespace LSMES_5ANEW_PLUS.App_Base
         /// <returns>解密后的字符串</returns>
         public static string Base64Decode(string result)
         {
+            if (ConfigurationManager.AppSettings["base64"].Trim().ToUpper() != "TRUE") return result;
+
             try
             {
                 result = Base64Decode(Encoding.UTF8, result.Replace(" ", "+"));   // 转换后通过web传输时“ ”会被自动转成“+”，所以提前转换;

@@ -211,7 +211,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     SqlDataReader reader = comm.ExecuteReader();
                     while (reader.Read())
                     {
-                        mailList += reader["EMAIL"].ToString() + ";";
+                        mailList += reader["EMAIL"].ToString() + ",";
                     }
                     reader.Close();
                     return mailList;
@@ -239,8 +239,9 @@ namespace LSMES_5ANEW_PLUS.Business
                 tWeb.addContext(DateTime.Now.ToString("G"));
 
                 Mail.SendMail(users, System.Configuration.ConfigurationManager.AppSettings["ExchangeUID"], System.Configuration.ConfigurationManager.AppSettings["ExchangePWD"], System.Configuration.ConfigurationManager.AppSettings["ExchangeDomain"], "极片数据上传任务", tWeb.TableHtml());
+
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 SysLog log = new SysLog(ex.Message);
             }

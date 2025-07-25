@@ -14,6 +14,11 @@ using System.Threading;
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Configuration;
+using Newtonsoft.Json.Linq;
+using System.Runtime.CompilerServices;
+
 
 namespace LSMES_5ANEW_PLUS.Business
 {
@@ -330,10 +335,6 @@ namespace LSMES_5ANEW_PLUS.Business
         {
             return AddSMPTask((SMPTask)task);
         }
-        /// <summary>
-        /// 遍历发送任务，发送数据
-        /// </summary>
-        /// <returns>所有任务执行完毕总共发送电池数量</returns>
         public override int SyncData()
         {
             try
@@ -370,6 +371,75 @@ namespace LSMES_5ANEW_PLUS.Business
             {
                 SysLog log = new SysLog(ex.Message);
                 return 0;
+            }
+        }
+        /// <summary>
+        /// 遍历发送任务，发送数据
+        /// </summary>
+        /// <returns>所有任务执行完毕总共发送电池数量</returns>
+        public int SyncData2(string handle, string taskno)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+                {
+                    //发送合计
+                    int mDataCount = 0;
+                    //打开连接
+                    conn.Open();
+                    SqlCommand command = new SqlCommand();
+                    command.Connection = conn;
+                    command.CommandText = string.Format("SELECT HANDLE,CODE,APPID,SECRET,TIMESTAMP,SIGN,URI FROM SMP_TASK WHERE STATE = '准备就绪' AND HANDLE = '{0}';", handle);
+                    SqlDataReader SDR_Task = command.ExecuteReader();
+                    //逐任务执行发送
+                    while (SDR_Task.Read())
+                    {
+                        //创建任务
+                        SyncTask task = new SMPTask();
+                        task.Handle = SDR_Task[0].ToString();
+                        task.CODE = SDR_Task[1].ToString();
+                        task.APPID = SDR_Task[2].ToString();
+                        task.SECRET = SDR_Task[3].ToString();
+                        task.TIMESTAMP = SDR_Task[4].ToString();
+                        task.SIGN = SDR_Task[5].ToString();
+                        task.URI = SDR_Task[6].ToString();
+                        //执行发送
+                        mDataCount += SendData(ref task);
+                    }
+                    return mDataCount;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return 0;
+            }
+        }
+        /// <summary>
+        /// 获取该任务实际回传数量
+        /// </summary>
+        /// <param name="handle">任务 handle</param>
+        /// <returns></returns>
+        public int GetQtyOfSend(string handle)
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncSMP::GetQtyOfSend => fail to open database.");
+                    }
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT COUNT(SSBL.CELLNAME) QTY FROM SMP_TASK T INNER JOIN SMP_SyncBattery_Log SSBL ON T.HANDLE = SSBL.HANDLE_TASK WHERE T.HANDLE = {0};", handle), conn);
+                    object result = comm.ExecuteScalar();
+                    return Convert.ToInt32(result);
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return 0;
+                }
             }
         }
         /// <summary>
@@ -629,7 +699,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (SDR_Email.Read())
                     {
                         emailList.Append(SDR_Email[1].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     SDR_Email.Close();
                     //生成邮件内容
@@ -1269,7 +1339,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (SDR_Email.Read())
                     {
                         emailList.Append(SDR_Email[1].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     SDR_Email.Close();
                     //生成邮件内容
@@ -1439,7 +1509,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (SDR_Email.Read())
                     {
                         emailList.Append(SDR_Email[1].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     SDR_Email.Close();
                     //生成邮件内容
@@ -1988,6 +2058,28 @@ namespace LSMES_5ANEW_PLUS.Business
                 return customer;
             }
         }
+        public List<BomDesay> GetBom()
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                //打开连接
+                conn.Open();
+                if (conn.State != ConnectionState.Open) return null;
+                SqlCommand comm = new SqlCommand("SELECT BOMNO,REMARKS,VERSION FROM DESAY_PRODUCT_CONFIG WHERE IS_CURRENT = 'Y' GROUP BY BOMNO,REMARKS,VERSION;", conn);
+                SqlDataReader reader = comm.ExecuteReader();
+                if (!reader.HasRows) return null;
+                List<BomDesay> lstBom = new List<BomDesay>();
+                while (reader.Read())
+                {
+                    BomDesay entity = new BomDesay();
+                    entity.BOMNO = reader["BOMNO"].ToString();
+                    entity.REMARK = reader["REMARKS"].ToString();
+                    entity.VERSION = reader["VERSION"].ToString();
+                    lstBom.Add(entity);
+                }
+                return lstBom;
+            }
+        }
         public DesayTask CreateDesayTask(string customer)
         {
             using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
@@ -2029,31 +2121,74 @@ namespace LSMES_5ANEW_PLUS.Business
                 }
             }
         }
+        public DesayTask CreateDesayTaskByBomno(string bomno)
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                //初始化Config对象
+                DesayTask DesayConfig = new DesayTask();
+                SqlCommand command = new SqlCommand();
+                try
+                {
+                    //打开连接
+                    conn.Open();
+                    command.Connection = conn;
+                    //查询当前配置
+                    command.CommandText = string.Format("INSERT INTO DESAY_TASK (HANDLE_CONFIG,HANDLE_PRODUCT_CONFIG,APPID,APPKEY,URI_LOGIN,URI_LOGOUT,URI_POST,MODULE,EXPRESS_QTY,STATE) OUTPUT INSERTED.HANDLE SELECT DC.HANDLE,DPC.HANDLE,DC.APP_ID,DC.APP_KEY,DC.URL_LOGIN,DC.URL_LOGOUT,DC.URL_POST,DPC.MODULE,100,'未开始' FROM DESAY_PRODUCT_CONFIG dpc INNER JOIN DESAY_CONFIG dc ON DC.REMARKS = DPC.REMARKS AND DC.VERSION = DPC.VERSION WHERE DPC.BOMNO = '{0}';", bomno);
+                    string handle = command.ExecuteScalar().ToString();
+                    command.CommandText = string.Format("SELECT T.HANDLE,HANDLE_CONFIG,HANDLE_PRODUCT_CONFIG,APPID,APPKEY,TICKET,URI_LOGIN,URI_LOGOUT,URI_POST,MODULE,EXPRESS_QTY,STATE,T.CREATED_DATE_TIME,VERSION FROM DESAY_TASK T INNER JOIN DESAY_CONFIG C ON C.HANDLE = T.HANDLE_CONFIG WHERE T.HANDLE = '{0}';", handle);
+                    SqlDataReader SDR_Config = command.ExecuteReader();
+                    while (SDR_Config.Read())
+                    {
+                        DesayConfig.HANDLE = SDR_Config[0].ToString();
+                        DesayConfig.HANDLE_CONFIG = SDR_Config[1].ToString();
+                        DesayConfig.HANDLE_PRODUCT_CONFIG = SDR_Config[2].ToString();
+                        DesayConfig.APPID = SDR_Config[3].ToString();
+                        DesayConfig.APPKEY = SDR_Config[4].ToString();
+                        DesayConfig.URI_LOGIN = SDR_Config[6].ToString();
+                        DesayConfig.URI_LOGOUT = SDR_Config[7].ToString();
+                        DesayConfig.URI_POST = SDR_Config[8].ToString();
+                        DesayConfig.MODULE = SDR_Config[9].ToString();
+                        DesayConfig.EXPRESS = int.Parse(SDR_Config[10].ToString());
+                        DesayConfig.VERSION = SDR_Config["VERSION"].ToString();
+                    }
+                    SDR_Config.Close();
+                    return DesayConfig;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
         public int CheckIn(string batteryInfo, DesayTask task)
         {
             int affectRow = 0;
             //BatteryDesay ship = new BatteryDesay();
-            
+
             //List<BatteryDesay> ship = new List<BatteryDesay>();
             //List<BatteryDesay2> ship2 = new List<BatteryDesay2>();
 
             BatteryDesayList bl = new BatteryDesayList();
             // 2023-11-20 注销
-            //BatteryDesayList2 bl2 = new BatteryDesayList2();
+            BatteryDesayList2 bl2 = new BatteryDesayList2();
             // 2023-11-20 新增
             BatteryDesayList3 bl3 = new BatteryDesayList3();
             try
             {
                 //整理数据
-                if (task.CUSTOMER == "HW")
+                if (task.CUSTOMER == "HW" && task.VERSION == "1.0")
                 {
                     bl = JsonConvert.DeserializeObject<BatteryDesayList>(batteryInfo);
                 }
-                else if (task.CUSTOMER == "COMMON")
+                else if (task.CUSTOMER == "COMMON" && task.VERSION == "1.0")
                 {
-                    // 2023-11-20 注销
-                    //bl2 = JsonConvert.DeserializeObject<BatteryDesayList2>(batteryInfo);
-                    // 2023-11-20 新增
+                    bl2 = JsonConvert.DeserializeObject<BatteryDesayList2>(batteryInfo);
+                }
+                // 2023-11-20 新增
+                else if (task.CUSTOMER == "COMMON" && task.VERSION == "2.6")
+                {
                     bl3 = JsonConvert.DeserializeObject<BatteryDesayList3>(batteryInfo);
                 }
             }
@@ -2081,7 +2216,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     command.Transaction = newTrans;
                     StringBuilder sqlStr = new StringBuilder();
                     //遍历数据
-                    if (task.CUSTOMER == "HW")
+                    if (task.CUSTOMER == "HW" && task.VERSION == "1.0")
                     {
                         for (int i = 0; i < bl.BatteryList.Count; ++i)
                         {
@@ -2123,29 +2258,30 @@ namespace LSMES_5ANEW_PLUS.Business
                             //sqlStr.Append(ship[i].Result);
                         }
                     }
-                    else if (task.CUSTOMER == "COMMON")
+                    else if (task.CUSTOMER == "COMMON" && task.VERSION == "1.0")
                     {
-                        // 2023-11-20 注销
+                        for (int i = 0; i < bl2.BatteryList.Count; ++i)
+                        {
 
-                        //for (int i = 0; i < bl2.BatteryList.Count; ++i)
-                        //{
-
-                        //    sqlStr.Append("INSERT INTO DESAY_SYNCBATTERY (HANDLE_TASK,BARCODE,OCV,IR,DATE,RESULT,KDATA) VALUES ('");
-                        //    sqlStr.Append(task.HANDLE);
-                        //    sqlStr.Append("','");
-                        //    sqlStr.Append(bl2.BatteryList[i].barcode);
-                        //    sqlStr.Append("','");
-                        //    sqlStr.Append(bl2.BatteryList[i].ocv);
-                        //    sqlStr.Append("','");
-                        //    sqlStr.Append(bl2.BatteryList[i].ir);
-                        //    sqlStr.Append("','");
-                        //    sqlStr.Append(bl2.BatteryList[i].date);
-                        //    sqlStr.Append("','");
-                        //    sqlStr.Append(bl2.BatteryList[i].result);
-                        //    sqlStr.Append("','");
-                        //    sqlStr.Append(bl2.BatteryList[i].KData);
-                        //    sqlStr.Append("');");
-                        //}
+                            sqlStr.Append("INSERT INTO DESAY_SYNCBATTERY (HANDLE_TASK,BARCODE,OCV,IR,DATE,RESULT,KDATA) VALUES ('");
+                            sqlStr.Append(task.HANDLE);
+                            sqlStr.Append("','");
+                            sqlStr.Append(bl2.BatteryList[i].barcode);
+                            sqlStr.Append("','");
+                            sqlStr.Append(bl2.BatteryList[i].ocv);
+                            sqlStr.Append("','");
+                            sqlStr.Append(bl2.BatteryList[i].ir);
+                            sqlStr.Append("','");
+                            sqlStr.Append(bl2.BatteryList[i].date);
+                            sqlStr.Append("','");
+                            sqlStr.Append(bl2.BatteryList[i].result);
+                            sqlStr.Append("','");
+                            sqlStr.Append(bl2.BatteryList[i].KData);
+                            sqlStr.Append("');");
+                        }
+                    }
+                    else if (task.CUSTOMER == "COMMON" && task.VERSION == "2.6")
+                    {
                         // 2023-11-20 新增
                         for (int i = 0; i < bl3.data.Count; ++i)
                         {
@@ -2275,14 +2411,14 @@ namespace LSMES_5ANEW_PLUS.Business
                     SqlDataReader reader = command.ExecuteReader();
                     List<BatteryDesay> batterys = new List<BatteryDesay>();
                     // 2023-11-20 注销
-                    //List<BatteryDesay2> batterys2 = new List<BatteryDesay2>();
+                    List<BatteryDesay2> batterys2 = new List<BatteryDesay2>();
                     // 2023-11-20 新增
                     BatteryDesayList3 batteryList3 = new BatteryDesayList3();
-                                        StringBuilder barcodes = new StringBuilder();
+                    StringBuilder barcodes = new StringBuilder();
                     barcodes.Clear();
                     while (reader.Read())
                     {
-                        if (task.CUSTOMER == "HW")
+                        if (task.CUSTOMER == "HW" && task.VERSION == "1.0")
                         {
                             BatteryDesay battery = new BatteryDesay();
                             battery.barcode = reader["BARCODE"].ToString();
@@ -2300,18 +2436,24 @@ namespace LSMES_5ANEW_PLUS.Business
                             barcodes.Append("',");
 
                         }
-                        else if (task.CUSTOMER == "COMMON")
+                        else if (task.CUSTOMER == "COMMON" && task.VERSION == "1.0")
                         {
                             // 2023-11-20 注销
-                            //BatteryDesay2 battery = new BatteryDesay2();
-                            //battery.barcode = reader["BARCODE"].ToString();
-                            //battery.ocv = double.Parse(reader["OCV"].ToString());
-                            //battery.ir = double.Parse(reader["IR"].ToString());
-                            //battery.date = reader["DATE"].ToString();
-                            //battery.result = int.Parse(reader["RESULT"].ToString());
-                            //battery.KData = double.Parse(reader["KData"].ToString());
-                            //batterys2.Add(battery);
-
+                            BatteryDesay2 battery = new BatteryDesay2();
+                            battery.barcode = reader["BARCODE"].ToString();
+                            battery.ocv = double.Parse(reader["OCV"].ToString());
+                            battery.ir = double.Parse(reader["IR"].ToString());
+                            battery.date = reader["DATE"].ToString();
+                            battery.result = int.Parse(reader["RESULT"].ToString());
+                            battery.KData = double.Parse(reader["KData"].ToString());
+                            batterys2.Add(battery);
+                            //  统计已完成码号
+                            barcodes.Append("'");
+                            barcodes.Append(battery.barcode);
+                            barcodes.Append("',");
+                        }
+                        else if (task.CUSTOMER == "COMMON" && task.VERSION == "2.6")
+                        {
                             // 2023-11-20 新增
                             BatteryDesay3 battery = new BatteryDesay3();
                             battery.PRODUCTCODE = reader["PRODUCTCODE"].ToString();
@@ -2331,20 +2473,24 @@ namespace LSMES_5ANEW_PLUS.Business
                             batteryList3.productcode = battery.PRODUCTCODE;
                             //  统计已完成码号
                             barcodes.Append("'");
+                            // 2.6 版本
                             barcodes.Append(battery.CELL_BARCODE);
                             barcodes.Append("',");
+
                         }
                     }
                     reader.Close();
                     string str = null;
-                    if (task.CUSTOMER == "HW")
+                    if (task.CUSTOMER == "HW" && task.VERSION == "1.0")
                     {
                         str = JsonConvert.SerializeObject(batterys);
                     }
-                    else if (task.CUSTOMER == "COMMON")
+                    else if (task.CUSTOMER == "COMMON" && task.VERSION == "1.0")
                     {
-                        // 2023-11-20 注销
-                        //str = JsonConvert.SerializeObject(batterys2);
+                        str = JsonConvert.SerializeObject(batterys2);
+                    }
+                    else if (task.CUSTOMER == "COMMON" && task.VERSION == "2.6")
+                    {
                         // 2023-11-20 新增
                         str = JsonConvert.SerializeObject(batteryList3);
                     }
@@ -2387,11 +2533,11 @@ namespace LSMES_5ANEW_PLUS.Business
                         throw new Exception("SyncDesay::UpdateSyncbattery => Desay database can not be open.");
                     }
                     string sql = null;
-                    if (task.CUSTOMER == "COMMON")
+                    if (task.CUSTOMER == "HW")
                     {
                         sql = string.Format("INSERT INTO DESAY_SYNCBATTERY_LOG (HANDLE_TASK,HANDLE_SEND_INFO,PRODUCTCODE,CELL_BARCODE,CAPACITY_BARCODE,MODEL_NUMBER,CARTON_NUMBER,BATCH_NUM,CAPACITY,OCV,IR,K_VALUE,FDATE,BIN,REMARK) SELECT HANDLE_TASK,'{0}',PRODUCTCODE,CELL_BARCODE,CAPACITY_BARCODE,MODEL_NUMBER,CARTON_NUMBER,BATCH_NUM,CAPACITY,OCV,IR,K_VALUE,FDATE,BIN,REMARK FROM DESAY_SYNCBATTERY WHERE CELL_BARCODE IN ({1});DELETE FROM DESAY_SYNCBATTERY WHERE CELL_BARCODE IN ({1});", handle_send_info, barcodes.ToString().Substring(0, barcodes.ToString().Length - 1));
                     }
-                    else if (task.CUSTOMER == "HW")
+                    else if (task.CUSTOMER == "COMMON")
                     {
                         sql = string.Format("INSERT INTO DESAY_SYNCBATTERY_LOG (HANDLE_TASK,HANDLE_SEND_INFO,PRODUCTCODE,BARCODE,CAPACITY_BARCODE,MODEL_NUMBER,CARTON_NUMBER,BATCH_NUM,CAPACITY,OCV,IR,K_VALUE,FDATE,BIN,REMARK) SELECT HANDLE_TASK,'{0}',PRODUCTCODE,BARCODE,CAPACITY_BARCODE,MODEL_NUMBER,CARTON_NUMBER,BATCH_NUM,CAPACITY,OCV,IR,K_VALUE,FDATE,BIN,REMARK FROM DESAY_SYNCBATTERY WHERE BARCODE IN ({1});DELETE FROM DESAY_SYNCBATTERY WHERE BARCODE IN ({1});", handle_send_info, barcodes.ToString().Substring(0, barcodes.ToString().Length - 1));
                     }
@@ -2477,7 +2623,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     SqlCommand comm = new SqlCommand(string.Format("SELECT S.HANDLE,SEND_INFO,JSON_INFO FROM DESAY_SEND_INFO S INNER JOIN DESAY_TASK T ON T.HANDLE = '{0}' AND T.STATE = '准备就绪' AND S.HANDLE_TASK = T.HANDLE AND S.STATE IS NULL;", task.HANDLE), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     WebSOAP soap = new WebSOAP();
-                    if (task.CUSTOMER == "COMMON")
+                    if (task.CUSTOMER == "COMMON" && task.VERSION == "2.6")
                     {
                         EntityLogin2 app = new EntityLogin2();
                         app.username = task.APPID;
@@ -2698,7 +2844,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         emailList.Append(reader[0].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     reader.Close();
                     //发送邮件
@@ -2718,13 +2864,39 @@ namespace LSMES_5ANEW_PLUS.Business
     public class SyncSunwoda
     {
         /// <summary>
+        /// 获取 SUNWODA BOM
+        /// </summary>
+        /// <param name="bomno"></param>
+        /// <returns></returns>
+        public Hashtable GetBom(string bomno = null)
+        {
+            Hashtable hashBom = new Hashtable();
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                if (conn.State != ConnectionState.Open) return null;
+                string sql = null;
+                if (!string.IsNullOrEmpty(bomno)) sql = $"SELECT BOMNO, HANDLE FROM SUNWODA_BOM WHERE STATE = 'Y' AND BOMNO = '{bomno}';";
+                else sql = "SELECT BOMNO, HANDLE FROM SUNWODA_BOM WHERE STATE = 'Y';";
+                SqlCommand comm = new SqlCommand(sql, conn);
+                using (SqlDataReader reader = comm.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        hashBom.Add(reader["BOMNO"].ToString(), reader["HANDLE"].ToString());
+                    }
+                }
+                return hashBom; 
+            }
+        }
+        /// <summary>
         /// 创建回传任务
         /// </summary>
         /// <param name="productline">线体</param>
         /// <returns></returns>
-        public SunwodaTask CreateTask(string productline)
+        public SunwodaTask CreateTask(string handle)
         {
-            if (string.IsNullOrEmpty(productline))
+            if (string.IsNullOrEmpty(handle))
             {
                 return null;
             }
@@ -2737,16 +2909,60 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SyncRemote database can not be open.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT HANDLE FROM SUNWODA_CONFIG WHERE STATE = 'Y' AND PRODUCTLINE = '{0}';", productline), conn);
+                    //SqlCommand comm = new SqlCommand(string.Format("SELECT HANDLE FROM SUNWODA_CONFIG WHERE STATE = 'Y' AND PRODUCTLINE = '{0}' AND TYPE = '{1}';", productline, type), conn);
+                    SqlCommand comm = new SqlCommand($"SELECT SC.HANDLE FROM SUNWODA_CONFIG SC INNER JOIN SUNWODA_BOM SB ON SC.HANDLE = SB.HANDLE_CONFIG AND SB.STATE = 'Y' AND SC.STATE = 'Y' WHERE SB.HANDLE = '{handle}'", conn);
+
                     string handle_config = comm.ExecuteScalar().ToString();
                     if (string.IsNullOrEmpty(handle_config))
                     {
                         throw new Exception("SyncSunwoda::CreateTask => No matching items found in the SUNWODA_CONFIG.");
                     }
                     comm.CommandText = string.Format(string.Format("INSERT INTO SUNWODA_TASK(HANDLE_CONFIG,EXPRESS_QTY,STATE) OUTPUT INSERTED.HANDLE VALUES ('{0}','{1}','未开始');", handle_config, "100"));
-                    string handle = comm.ExecuteScalar().ToString();
+                    string _handle = comm.ExecuteScalar().ToString();
                     SunwodaTask task = new SunwodaTask();
-                    return GetTask(handle);
+                    task = GetTask(_handle);
+                    if (!string.IsNullOrEmpty(task.URI_TOKEN))
+                    {
+                        string info = GetToken(task.URI_TOKEN, task.TOKEN_PARA);
+                        TokenSunwoda result = JsonConvert.DeserializeObject<TokenSunwoda>(info);
+                        if (result.statusCode == 200)
+                        {
+                            task.TOKEN = result.message;
+                            comm.CommandText = $"UPDATE SUNWODA_CONFIG SET TOKEN = '{task.TOKEN}' WHERE HANDLE = '{handle_config}'";
+                            comm.ExecuteNonQuery();
+                        }
+                    }
+                    return task;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 获取 Token
+        /// </summary>
+        /// <param name="uri">Token 地址</param>
+        /// <param name="info">参数</param>
+        /// <returns></returns>
+        public string GetToken(string uri, string info)
+        {
+            if (string.IsNullOrEmpty(uri)) return null;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncRemote database can not be open.");
+                    }
+
+                    WebSOAP soap = new WebSOAP();
+                    string result = soap.Sunwoda_TokenQuerySoapWebService(uri, info);
+                    return result;
                 }
                 catch (Exception ex)
                 {
@@ -2776,7 +2992,7 @@ namespace LSMES_5ANEW_PLUS.Business
                         throw new Exception("SyncRemote database can not be open.");
                     }
                     SunwodaTask task = new SunwodaTask();
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT T.HANDLE,T.EXPRESS_QTY,S.HANDLE AS HANDLE_CONFIG,DATATYPE,S.SUPPLIERID,S.APPKEY,S.SUPPLIERNAME,S.SUPPLIERCODE,S.PASSWORD,S.PRODUCTLINE,S.URI,T.STATE,T.CREATED_DATE_TIME,T.EXPRESS_QTY FROM SUNWODA_TASK T INNER JOIN SUNWODA_CONFIG S ON T.HANDLE_CONFIG = S.HANDLE AND T.HANDLE = {0}; ", handle), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT T.HANDLE,T.EXPRESS_QTY,S.HANDLE AS HANDLE_CONFIG,DATATYPE,S.SUPPLIERID,S.APPKEY,S.SUPPLIERNAME,S.SUPPLIERCODE,S.PASSWORD,S.PRODUCTLINE,S.URI,S.TOKEN,URI_TOKEN,TOKEN_PARA,T.STATE,T.CREATED_DATE_TIME,T.EXPRESS_QTY FROM SUNWODA_TASK T INNER JOIN SUNWODA_CONFIG S ON T.HANDLE_CONFIG = S.HANDLE AND T.HANDLE = {0}; ", handle), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     while (reader.Read())
                     {
@@ -2793,6 +3009,9 @@ namespace LSMES_5ANEW_PLUS.Business
                         task.SUPPLIERNAME = reader["SUPPLIERNAME"].ToString();
                         task.URI = reader["URI"].ToString();
                         task.EXPRESS_QTY = reader["EXPRESS_QTY"].ToString();
+                        task.TOKEN = reader["TOKEN"].ToString();
+                        task.URI_TOKEN = reader["URI_TOKEN"].ToString();
+                        task.TOKEN_PARA = reader["TOKEN_PARA"].ToString();
                     }
                     reader.Close();
                     return task;
@@ -2830,7 +3049,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     batteryList = JsonConvert.DeserializeObject<BatteryListSunwoda>(batteryInfo);
                     foreach (BatterySunwoda battery in batteryList.batterys)
                     {
-                        sql.Append(string.Format("INSERT INTO SUNWODA_SYNCBATTERY (HANDLE_TASK,BARNAME,BARCODE,CELLSN,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,PRODUCTLINE,TESTTIME,LOTNO) VALUES ('{0}','{1}','{2}','{3}','{4}','{5}','{6}','{7}','{8}','{9}','{10}','{11}','{12}','{13}','{14}','{15}','{16}','{17}','{18}','{19}','{20}','{21}','{22}','{23}','{24}');", task.HANDLE, battery.projectName, battery.projectCode, battery.barcode, battery.capacity, battery.capacityLowerLimit, battery.capacityUpperLimit, battery.capacityUnit, battery.kvalue, battery.kvalueLowerLimit, battery.kvalueUpperLimit, battery.kvalueUnit, battery.resistance, battery.resistanceLowerLimit, battery.resistanceUpperLimit, battery.resistanceUnit, battery.voltage, battery.voltageLowerLimit, battery.voltageUpperLimit, battery.voltageUnit, battery.result, battery.remark, battery.productLine, battery.testtime, battery.lotno));
+                        sql.Append(string.Format("INSERT INTO SUNWODA_SYNCBATTERY (HANDLE_TASK,BARNAME,BARCODE,CELLSN,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,PRODUCTLINE,TESTTIME,LOTNO,SWDPN,PALLETSN,ASNSN) VALUES ('{0}','{1}','{2}','{3}','{4}','{5}','{6}','{7}','{8}','{9}','{10}','{11}','{12}','{13}','{14}','{15}','{16}','{17}','{18}','{19}','{20}','{21}','{22}','{23}','{24}','{25}','{26}','{27}');", task.HANDLE, battery.projectName, battery.projectCode, battery.barcode, battery.capacity, battery.capacityLowerLimit, battery.capacityUpperLimit, battery.capacityUnit, battery.kvalue, battery.kvalueLowerLimit, battery.kvalueUpperLimit, battery.kvalueUnit, battery.resistance, battery.resistanceLowerLimit, battery.resistanceUpperLimit, battery.resistanceUnit, battery.voltage, battery.voltageLowerLimit, battery.voltageUpperLimit, battery.voltageUnit, battery.result, battery.remark, battery.productLine, battery.testtime, battery.lotno, battery.swdpn, battery.palletsn, battery.asnsn));
                     }
                     SqlCommand comm = new SqlCommand(sql.ToString(), conn);
                     SqlTransaction tran = conn.BeginTransaction();
@@ -2921,7 +3140,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SyncSunwoda::CreateSendInfo => SyncSunwoda db can not be open.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT HANDLE,HANDLE_TASK,BARNAME,BARCODE,CELLSN,PRODUCTLINE,CONVERT(NVARCHAR(50),TESTTIME,120) TESTTIME,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,STATE,CREATED_DATE_TIME,LOTNO FROM SUNWODA_SYNCBATTERY WHERE HANDLE_TASK = '{0}' AND CELLSN IN ({1});", task.HANDLE, barcodes), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT HANDLE,HANDLE_TASK,BARNAME,BARCODE,CELLSN,PRODUCTLINE,CONVERT(NVARCHAR(50),TESTTIME,120) TESTTIME,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,STATE,CREATED_DATE_TIME,LOTNO,SWDPN,PALLETSN,ASNSN FROM SUNWODA_SYNCBATTERY WHERE HANDLE_TASK = '{0}' AND CELLSN IN ({1});", task.HANDLE, barcodes), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     SCUD_OcvData SunwodaData = new SCUD_OcvData();
                     SunwodaData.appKey = task.APPKEY;
@@ -2938,39 +3157,51 @@ namespace LSMES_5ANEW_PLUS.Business
                         CellData.barCode = reader["BARCODE"].ToString();
                         CellData.cellSn = reader["CELLSN"].ToString();
                         CellData.productLine = reader["PRODUCTLINE"].ToString();
+                        CellData.asnSn = reader["ASNSN"].ToString();
                         CellData.testTime = reader["TESTTIME"].ToString();
                         // OCV 测试项目
                         SCUD_testItems TestItems = new SCUD_testItems();
                         TestItems.testItem = "OCV";
-                        TestItems.lowerLimit = double.Parse(reader["VOLTAGE_LOWERLIMIT"].ToString());
-                        TestItems.upperLimit = double.Parse(reader["VOLTAGE_UPPERLIMIT"].ToString());
+                        TestItems.lowerLimit = double.Parse(!string.IsNullOrEmpty(reader["VOLTAGE_LOWERLIMIT"].ToString()) ? reader["VOLTAGE_LOWERLIMIT"].ToString() : "0");
+                        TestItems.upperLimit = double.Parse(!string.IsNullOrEmpty(reader["VOLTAGE_UPPERLIMIT"].ToString()) ? reader["VOLTAGE_UPPERLIMIT"].ToString() : "0");
                         TestItems.unit = reader["VOLTAGE_UNIT"].ToString();
-                        TestItems.testValue = double.Parse(reader["VOLTAGE"].ToString());
-                        TestItems.testResult = reader["RESULT"].ToString();
+                        TestItems.testValue = double.Parse(!string.IsNullOrEmpty(reader["VOLTAGE"].ToString()) ? reader["VOLTAGE"].ToString() : "0");
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems.testResult = "OK";
+                        else TestItems.testResult = reader["RESULT"].ToString();
                         TestItems.remark = reader["REMARK"].ToString();
+                        TestItems.swdPn = reader["SWDPN"].ToString();
+                        TestItems.palletSn = reader["PALLETSN"].ToString();
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems);
 
                         // IMP 测试项目（消费类产品内阻称为：IMP）
                         SCUD_testItems TestItems2 = new SCUD_testItems();
                         TestItems2.testItem = "IMP";
-                        TestItems2.lowerLimit = double.Parse(reader["RESISTANCE_LOWERLIMIT"].ToString());
-                        TestItems2.upperLimit = double.Parse(reader["RESISTANCE_UPPERLIMIT"].ToString());
+                        TestItems2.lowerLimit = double.Parse(!string.IsNullOrEmpty(reader["RESISTANCE_LOWERLIMIT"].ToString()) ? reader["RESISTANCE_LOWERLIMIT"].ToString() : "0");
+                        TestItems2.upperLimit = double.Parse(!string.IsNullOrEmpty(reader["RESISTANCE_UPPERLIMIT"].ToString()) ? reader["RESISTANCE_UPPERLIMIT"].ToString() : "0");
                         TestItems2.unit = reader["RESISTANCE_UNIT"].ToString();
-                        TestItems2.testValue = double.Parse(reader["RESISTANCE"].ToString());
-                        TestItems2.testResult = reader["RESULT"].ToString();
+                        TestItems2.testValue = double.Parse(!string.IsNullOrEmpty(reader["RESISTANCE"].ToString()) ? reader["RESISTANCE"].ToString() : "0");
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems2.testResult = "OK";
+                        else TestItems2.testResult = reader["RESULT"].ToString();
                         TestItems2.remark = reader["REMARK"].ToString();
+                        TestItems2.swdPn = reader["SWDPN"].ToString();
+                        TestItems2.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems2);
                         // IR 测试项目（动力类产品内阻称为：IR）
                         SCUD_testItems TestItems22 = new SCUD_testItems();
                         TestItems22.testItem = "IR";
-                        TestItems22.lowerLimit = double.Parse(reader["RESISTANCE_LOWERLIMIT"].ToString());
+                        TestItems22.lowerLimit = double.Parse(!string.IsNullOrEmpty(reader["RESISTANCE_LOWERLIMIT"].ToString()) ? reader["RESISTANCE_LOWERLIMIT"].ToString() : "0");
                         TestItems22.upperLimit = double.Parse(reader["RESISTANCE_UPPERLIMIT"].ToString());
                         TestItems22.unit = reader["RESISTANCE_UNIT"].ToString();
-                        TestItems22.testValue = double.Parse(reader["RESISTANCE"].ToString());
-                        TestItems22.testResult = reader["RESULT"].ToString();
+                        TestItems22.testValue = double.Parse(!string.IsNullOrEmpty(reader["RESISTANCE"].ToString()) ? reader["RESISTANCE"].ToString() : "0");
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems22.testResult = "OK";
+                        else TestItems22.testResult = reader["RESULT"].ToString();
                         TestItems22.remark = reader["REMARK"].ToString();
+                        TestItems22.swdPn = reader["SWDPN"].ToString();
+                        TestItems22.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems22);
 
@@ -2978,35 +3209,47 @@ namespace LSMES_5ANEW_PLUS.Business
                         // KValue 测试项目
                         SCUD_testItems TestItems3 = new SCUD_testItems();
                         TestItems3.testItem = "K";
-                        TestItems3.lowerLimit = double.Parse(reader["KVALUE_LOWERLIMIT"].ToString());
-                        TestItems3.upperLimit = double.Parse(reader["KVALUE_UPPERLIMIT"].ToString());
+                        TestItems3.lowerLimit = double.Parse(!string.IsNullOrEmpty(reader["KVALUE_LOWERLIMIT"].ToString()) ? reader["KVALUE_LOWERLIMIT"].ToString() : "0");
+                        TestItems3.upperLimit = double.Parse(!string.IsNullOrEmpty(reader["KVALUE_UPPERLIMIT"].ToString()) ? reader["KVALUE_UPPERLIMIT"].ToString() : "0");
                         TestItems3.unit = reader["KVALUE_UNIT"].ToString();
-                        TestItems3.testValue = double.Parse(reader["KVALUE"].ToString());
-                        TestItems3.testResult = reader["RESULT"].ToString();
+                        TestItems3.testValue = double.Parse(!string.IsNullOrEmpty(reader["KVALUE"].ToString()) ? reader["KVALUE"].ToString() : "0");
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems3.testResult = "OK";
+                        else TestItems3.testResult = reader["RESULT"].ToString();
                         TestItems3.remark = reader["REMARK"].ToString();
+                        TestItems3.swdPn = reader["SWDPN"].ToString();
+                        TestItems3.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems3);
 
                         // CAPACITY 测试项目（消费类容量称为：CAPAC）
                         SCUD_testItems TestItems4 = new SCUD_testItems();
                         TestItems4.testItem = "CAPAC";
-                        TestItems4.lowerLimit = double.Parse(reader["CAPACITY_LOWERLIMIT"].ToString());
-                        TestItems4.upperLimit = double.Parse(reader["CAPACITY_UPPERLIMIT"].ToString());
+                        TestItems4.lowerLimit = double.Parse(!string.IsNullOrEmpty(reader["CAPACITY_LOWERLIMIT"].ToString()) ? reader["CAPACITY_LOWERLIMIT"].ToString() : "0");
+                        TestItems4.upperLimit = double.Parse(!string.IsNullOrEmpty(reader["CAPACITY_UPPERLIMIT"].ToString()) ? reader["CAPACITY_UPPERLIMIT"].ToString() : "0");
                         TestItems4.unit = reader["CAPACITY_UNIT"].ToString();
-                        TestItems4.testValue = double.Parse(reader["CAPACITY"].ToString());
-                        TestItems4.testResult = reader["RESULT"].ToString();
+                        TestItems4.testValue = double.Parse(!string.IsNullOrEmpty(reader["CAPACITY"].ToString()) ? reader["CAPACITY"].ToString() : "0");
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems4.testResult = "OK";
+                        else TestItems4.testResult = reader["RESULT"].ToString();
                         TestItems4.remark = reader["REMARK"].ToString();
+                        TestItems4.swdPn = reader["SWDPN"].ToString();
+                        TestItems4.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems4);
                         // CAPACITY 测试项目（动力类容量称为：Capacity）
                         SCUD_testItems TestItems44 = new SCUD_testItems();
                         TestItems44.testItem = "Capacity";
-                        TestItems44.lowerLimit = double.Parse(reader["CAPACITY_LOWERLIMIT"].ToString());
-                        TestItems44.upperLimit = double.Parse(reader["CAPACITY_UPPERLIMIT"].ToString());
+                        TestItems44.lowerLimit = double.Parse(!string.IsNullOrEmpty(reader["CAPACITY_LOWERLIMIT"].ToString()) ? reader["CAPACITY_LOWERLIMIT"].ToString() : "0");
+                        TestItems44.upperLimit = double.Parse(!string.IsNullOrEmpty(reader["CAPACITY_UPPERLIMIT"].ToString()) ? reader["CAPACITY_UPPERLIMIT"].ToString() : "0");
                         TestItems44.unit = reader["CAPACITY_UNIT"].ToString();
-                        TestItems44.testValue = double.Parse(reader["CAPACITY"].ToString());
-                        TestItems44.testResult = reader["RESULT"].ToString();
+                        TestItems44.testValue = double.Parse(!string.IsNullOrEmpty(reader["CAPACITY"].ToString()) ? reader["CAPACITY"].ToString() : "0");
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems44.testResult = "OK";
+                        else TestItems44.testResult = reader["RESULT"].ToString();
                         TestItems44.remark = reader["REMARK"].ToString();
+                        TestItems44.swdPn = reader["SWDPN"].ToString();
+                        TestItems44.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems44);
 
@@ -3017,20 +3260,35 @@ namespace LSMES_5ANEW_PLUS.Business
                         TestItems5.upperLimit = 0;
                         TestItems5.unit = "0";
                         TestItems5.testValue = 0;
-                        TestItems5.testResult = "0";
+                        if (!string.IsNullOrEmpty(task.TOKEN)) TestItems5.testResult = "OK";
+                        else TestItems5.testResult = "0";
                         TestItems5.remark = reader["LOTNO"].ToString();
+                        TestItems5.swdPn = reader["SWDPN"].ToString();
+                        TestItems5.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems5);
 
                         // CELL_GROUP 项目
                         SCUD_testItems TestItems6 = new SCUD_testItems();
-                        TestItems6.testItem = "CELLGROUP";
+                        if (!string.IsNullOrEmpty(task.TOKEN))
+                        {
+                            TestItems6.testItem = "CELL_GROUP";
+                            TestItems6.testResult = "OK";
+                        }
+                        else
+                        {
+                            TestItems6.testItem = "CELLGROUP";
+                            TestItems6.testResult = "0";
+                        }
                         TestItems6.lowerLimit = 0;
                         TestItems6.upperLimit = 0;
                         TestItems6.unit = "0";
                         TestItems6.testValue = 0;
-                        TestItems6.testResult = "0";
                         TestItems6.remark = reader["RESULT"].ToString();
+                        TestItems6.swdPn = reader["SWDPN"].ToString();
+                        TestItems6.palletSn = reader["PALLETSN"].ToString();
+
                         // 测试项目加入电池
                         CellData.testItemList.Add(TestItems6);
 
@@ -3054,12 +3312,13 @@ namespace LSMES_5ANEW_PLUS.Business
                 }
                 catch (Exception ex)
                 {
-                    SysLog log = new SysLog(ex.Message);
+                    SysLog log = new SysLog("SyncSunwoda::CreateSendInfo => " + ex.Message);
                     handle = null;
                     return handle;
                 }
             }
         }
+        
         /// <summary>
         /// 根据码号、send_info的handl更新syncbattery
         /// </summary>
@@ -3081,12 +3340,12 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SyncSunwoda::CreateSnycBatteryLog => SyncSunwoda db can not be open.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("INSERT INTO SUNWODA_SYNCBATTERY_LOG (HANDLE_SEND_INFO,HANDLE_TASK,BARNAME,BARCODE,CELLSN,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,STATE,PRODUCTLINE,TESTTIME,LOTNO) SELECT '{0}',HANDLE_TASK,BARNAME,BARCODE,CELLSN,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,STATE,PRODUCTLINE,TESTTIME,LOTNO FROM SUNWODA_SYNCBATTERY WHERE CELLSN IN ({1});DELETE FROM SUNWODA_SYNCBATTERY WHERE CELLSN IN ({1});", handle, barcodes), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("INSERT INTO SUNWODA_SYNCBATTERY_LOG (HANDLE_SEND_INFO,HANDLE_TASK,BARNAME,BARCODE,CELLSN,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,STATE,PRODUCTLINE,TESTTIME,LOTNO,SWDPN,ASNSN) SELECT '{0}',HANDLE_TASK,BARNAME,BARCODE,CELLSN,CAPACITY,CAPACITY_LOWERLIMIT,CAPACITY_UPPERLIMIT,CAPACITY_UNIT,KVALUE,KVALUE_LOWERLIMIT,KVALUE_UPPERLIMIT,KVALUE_UNIT,RESISTANCE,RESISTANCE_LOWERLIMIT,RESISTANCE_UPPERLIMIT,RESISTANCE_UNIT,VOLTAGE,VOLTAGE_LOWERLIMIT,VOLTAGE_UPPERLIMIT,VOLTAGE_UNIT,RESULT,REMARK,STATE,PRODUCTLINE,TESTTIME,LOTNO,SWDPN,ASNSN FROM SUNWODA_SYNCBATTERY WHERE CELLSN IN ({1});DELETE FROM SUNWODA_SYNCBATTERY WHERE CELLSN IN ({1});", handle, barcodes), conn);
                     return comm.ExecuteNonQuery();
                 }
                 catch (Exception ex)
                 {
-                    SysLog log = new SysLog(ex.Message);
+                    SysLog log = new SysLog("SyncSunwoda::CreateSnycBatteryLog => " + ex.Message);
                     return 0;
                 }
             }
@@ -3156,7 +3415,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     string result = null;
                     while (reader.Read())
                     {
-                        result = soap.Sunwoda_QuerySoapWebService(task.URI, reader["SEND_INFO"].ToString());
+                        result = soap.Sunwoda_QuerySoapWebService(task.URI, reader["SEND_INFO"].ToString(), 0, task.TOKEN);
                         if (Recieved(task, reader["HANDLE"].ToString(),result))
                         {
                             CreateSendDataLog(task, reader["HANDLE"].ToString());
@@ -3217,9 +3476,14 @@ namespace LSMES_5ANEW_PLUS.Business
         /// <returns></returns>
         public bool Recieved(SunwodaTask task,string handleSendInfo,string str)
         {
+            string sql = null, sql2 = null;
+            string handle = null;
+            SCUD_responseResult result = null;
+            SUNWODA_responseResult result2 = null;
             try
             {
-                SCUD_responseResult result = JsonConvert.DeserializeObject<SCUD_responseResult>(str);
+                if (string.IsNullOrEmpty(task.TOKEN)) result = JsonConvert.DeserializeObject<SCUD_responseResult>(str);
+                else result2 = JsonConvert.DeserializeObject<SUNWODA_responseResult>(str);
                 using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
                 {
                     conn.Open();
@@ -3227,22 +3491,29 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SyncSunwoda::Recieved => database can not be open.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("INSERT INTO SUNWODA_RECIEVED_INFO (HANDLE_TASK,HANDLE_SEND_INFO,RECIEVED_INFO) OUTPUT INSERTED.HANDLE VALUES ('{0}','{1}','{2}');", task.HANDLE, handleSendInfo, str), conn);
-                    string handle = comm.ExecuteScalar().ToString();
+                    sql = string.Format("INSERT INTO SUNWODA_RECIEVED_INFO (HANDLE_TASK,HANDLE_SEND_INFO,RECIEVED_INFO) OUTPUT INSERTED.HANDLE VALUES ('{0}','{1}','{2}');", task.HANDLE, handleSendInfo, str);
+                    SqlCommand comm = new SqlCommand(sql, conn);
+                    handle = comm.ExecuteScalar().ToString();
                     if (string.IsNullOrEmpty(handle))
                     {
                         throw new Exception("SyncSunwoda::Recieved => Failed to Insert SUNWODA_RECIEVED_Info information");
                     }
-                    comm.CommandText = string.Format("INSERT INTO SUNWODA_RECIEVED_LOG (HANDLE_TASK,HANDLE_RECIEVED_INFO,errorMsg,successMsg,status,remark,data,date,year) VALUES ('{0}','{1}','{2}','{3}','{4}','{5}','{6}','{7}','{8}');", task.HANDLE, handleSendInfo, result.errorMsg, result.successMsg, result.status, result.remark, result.data, result.date, result.year);
+                    if (string.IsNullOrEmpty(task.TOKEN))
+                        sql2 = string.Format("INSERT INTO SUNWODA_RECIEVED_LOG (HANDLE_TASK,HANDLE_RECIEVED_INFO,errorMsg,successMsg,status,remark,data,date,year) VALUES ('{0}','{1}','{2}','{3}','{4}','{5}','{6}','{7}','{8}');", task.HANDLE, handleSendInfo, result.errorMsg, result.successMsg, result.status, result.remark, result.data, result.date, result.year);
+                    else
+                        sql2 = $"INSERT INTO SUNWODA_RECIEVED_LOG(HANDLE_TASK,HANDLE_RECIEVED_INFO) VALUES ('{task.HANDLE}','{handleSendInfo}');";
+                    comm.CommandText = sql2;
                     if (comm.ExecuteNonQuery() == 1)
                     {
-                        if (result.status == "true")
+                        if (string.IsNullOrEmpty(task.TOKEN))
                         {
-                            return true;
+                            if (result.status == "true") return true;
+                            else return false;
                         }
                         else
                         {
-                            return false;
+                            if (result2.statusCode == 200) return true;
+                            else return false;
                         }
                     }
                     else
@@ -3302,10 +3573,14 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("SyncSunwoda::Complete => database can not be open.");
                     }
+                    //SqlCommand comm = new SqlCommand(string.Format("WITH A AS (SELECT T.HANDLE,T.STATE,T.CREATED_DATE_TIME,COUNT(L.HANDLE) C1	FROM SUNWODA_TASK T	INNER JOIN SUNWODA_SEND_INFO I ON T.HANDLE = I.HANDLE_TASK INNER JOIN SUNWODA_SYNCBATTERY_LOG L ON L.HANDLE_SEND_INFO = I.HANDLE AND L.HANDLE_TASK = T.HANDLE GROUP BY T.HANDLE,T.STATE,T.CREATED_DATE_TIME),B AS (SELECT T.HANDLE,T.STATE,T.CREATED_DATE_TIME,COUNT(L.HANDLE) C2 FROM SUNWODA_TASK T INNER JOIN SUNWODA_SEND_LOG L ON T.HANDLE = L.HANDLE_TASK INNER JOIN SUNWODA_SYNCBATTERY_LOG LL ON LL.HANDLE_SEND_INFO = L.HANDLE_SEND_INFO AND T.HANDLE = LL.HANDLE_TASK GROUP BY T.HANDLE,T.STATE,T.CREATED_DATE_TIME) SELECT T.HANDLE 任务编号,B.HANDLE 回传序号,T.ITEM_NO 物料编号,I.BOMNO 型号,B.STATE 任务状态,B.CREATED_DATE_TIME 开始回传时间,A.C1 未发送量,B.C2 已发送数量 FROM B LEFT JOIN A ON A.HANDLE = B.HANDLE LEFT JOIN TASK T ON B.HANDLE = T.HANDLE_TASK INNER JOIN ITEM I ON T.ITEM_NO = I.ITEM WHERE B.HANDLE = '{0}' ORDER BY B.CREATED_DATE_TIME DESC;", task.HANDLE), conn);
                     SqlCommand comm = new SqlCommand(string.Format("WITH A AS(SELECT T.HANDLE,T.STATE,T.CREATED_DATE_TIME,COUNT(L.HANDLE) C1 FROM SUNWODA_TASK T INNER JOIN SUNWODA_SEND_INFO I ON T.HANDLE = I.HANDLE_TASK INNER JOIN SUNWODA_SYNCBATTERY_LOG L ON L.HANDLE_SEND_INFO = I.HANDLE AND L.HANDLE_TASK = T.HANDLE GROUP BY  T.HANDLE,T.STATE,T.CREATED_DATE_TIME),B AS (SELECT T.HANDLE,T.STATE,T.CREATED_DATE_TIME,COUNT(L.HANDLE) C2 FROM SUNWODA_TASK T INNER JOIN SUNWODA_SEND_LOG L ON T.HANDLE = L.HANDLE_TASK INNER JOIN SUNWODA_SYNCBATTERY_LOG LL ON LL.HANDLE_SEND_INFO = L.HANDLE_SEND_INFO AND T.HANDLE = LL.HANDLE_TASK GROUP BY T.HANDLE,T.STATE,T.CREATED_DATE_TIME) SELECT B.HANDLE 任务编号,B.STATE 任务状态,B.CREATED_DATE_TIME 开始回传时间,A.C1 未发送数量,B.C2 已发送数量 FROM B LEFT JOIN A ON A.HANDLE = B.HANDLE WHERE B.HANDLE = '{0}' ORDER BY B.CREATED_DATE_TIME DESC;", task.HANDLE), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     TableWeb tWeb = new TableWeb();
                     tWeb.addThead("任务编号");
+                    //tWeb.addThead("执行顺序");
+                    //tWeb.addThead("物料编号");
+                    //tWeb.addThead("产品型号");
                     tWeb.addThead("任务状态");
                     tWeb.addThead("开始回传时间");
                     tWeb.addThead("失败数量");
@@ -3313,6 +3588,9 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         tWeb.addContext(reader["任务编号"].ToString());
+                        //tWeb.addContext(reader["执行顺序"].ToString());
+                        //tWeb.addContext(reader["物料编号"].ToString());
+                        //tWeb.addContext(reader["产品型号"].ToString());
                         tWeb.addContext(reader["任务状态"].ToString());
                         tWeb.addContext(reader["开始回传时间"].ToString());
                         tWeb.addContext(reader["未发送数量"].ToString());
@@ -3325,7 +3603,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         emailList.Append(reader[0].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     reader.Close();
                     //发送邮件
@@ -3517,7 +3795,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     StringBuilder sql = new StringBuilder();
                     for (int i = 0; i < batteryInfo.data.Count; ++i)
                     {
-                        sql.Append(string.Format("INSERT INTO SCUD_SYNCBATTERY (HANDLE_TASK,cellSn,voltageValue,testDate,PB_SN,CO_ITEM_CODE,CO_ITEM_NAME,CO_ITEM_SPEC,PN_SN,GEAR) VALUES ('{0}','{1}',{2},'{3}','{4}','{5}','{6}','{7}','{8}','{9}');", task.HANDLE, batteryInfo.data[i].cellSn, batteryInfo.data[i].voltageValue, batteryInfo.data[i].testDate, batteryInfo.data[i].PB_SN, batteryInfo.data[i].CO_ITEM_CODE, batteryInfo.data[i].CO_ITEM_NAME, batteryInfo.data[i].CO_ITEM_SPEC, batteryInfo.data[i].PN_SN, batteryInfo.data[i].GEAR));
+                        sql.Append(string.Format("INSERT INTO SCUD_SYNCBATTERY (HANDLE_TASK,cellSn,voltageValue,testDate,PB_SN,CO_ITEM_CODE,CO_ITEM_NAME,CO_ITEM_SPEC,PN_SN,GEAR,IRValue) VALUES ('{0}','{1}',{2},'{3}','{4}','{5}','{6}','{7}','{8}','{9}','{10}');", task.HANDLE, batteryInfo.data[i].cellSn, batteryInfo.data[i].voltageValue, batteryInfo.data[i].testDate, batteryInfo.data[i].PB_SN, batteryInfo.data[i].CO_ITEM_CODE, batteryInfo.data[i].CO_ITEM_NAME, batteryInfo.data[i].CO_ITEM_SPEC, batteryInfo.data[i].PN_SN, batteryInfo.data[i].GEAR, batteryInfo.data[i].IRValue));
                     }
                     SqlCommand comm = new SqlCommand(sql.ToString(), conn);
                     SqlTransaction tran = conn.BeginTransaction();
@@ -3587,6 +3865,56 @@ namespace LSMES_5ANEW_PLUS.Business
                         SysLog log = new SysLog(ex.Message);
                     }
                     return rowAffect;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return 0;
+            }
+        }
+        /// <summary>
+        /// 导入智能家具数据
+        /// </summary>
+        /// <param name="batteryInfo">智能家具对象</param>
+        /// <param name="task">任务对象</param>
+        /// <returns>成功导入数量</returns>
+        public int CheckInBySmartFurniture(List<SmartFurnitureSCUD> batteryInfo,SCUDTask task)
+        {
+            try
+            {
+                if (batteryInfo.Count == 0 || task == null)
+                {
+                    throw new Exception("SyncSCUD::CheckInBySmartFurniture => No data is available for import or the task does not exist");
+                }
+                using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncSCUD::CheckInBySmartFurniture => SyncRemote database can not be open.");
+                    }
+                    StringBuilder sql = new StringBuilder();
+                    for (int i = 0; i < batteryInfo.Count; ++i)
+                    {
+                        sql.Append($"INSERT INTO SCUD_SYNCBATTERY (HANDLE_TASK,sn,ocvb_voltage,ocvb_test_time,ocvb_inter_resi,capacity,grade,k_value,thickness,supplier_no,ocv1,ocv1_test_time,ir1,ocv2,ocv2_test_time,ir2,test_result,lot) VALUES ('{task.HANDLE}','{batteryInfo[i].sn}','{batteryInfo[i].ocvb_voltage}','{batteryInfo[i].ocvb_test_time}','{batteryInfo[i].ocvb_inter_resi}','{batteryInfo[i].capacity}','{batteryInfo[i].grade}','{batteryInfo[i].k_value}','{batteryInfo[i].thickness}','{batteryInfo[i].supplier_no}','{batteryInfo[i].ocv1}','{batteryInfo[i].ocv1_test_time}','{batteryInfo[i].ir1}','{batteryInfo[i].ocv2}','{batteryInfo[i].ocv2_test_time}','{batteryInfo[i].ir2}','{batteryInfo[i].test_result}','{batteryInfo[i].lot}');");
+                    }
+                    SqlCommand comm = new SqlCommand(sql.ToString(), conn);
+                    SqlTransaction tran = conn.BeginTransaction();
+                    comm.Transaction = tran;
+                    int rowAffect = comm.ExecuteNonQuery();
+                    if (rowAffect == batteryInfo.Count)
+                    {
+                        tran.Commit();
+                        comm.CommandText = $"UPDATE SCUD_TASK SET TOTAL = '{rowAffect}' WHERE HANDLE = '{task.HANDLE}';";
+                        comm.ExecuteNonQuery();
+                        return rowAffect;
+                    }
+                    else
+                    {
+                        tran.Rollback();
+                        throw new Exception("SyncSCUD::CheckInBySmartFurniture => Fail to checkin data");
+                    }
                 }
             }
             catch (Exception ex)
@@ -3669,10 +3997,11 @@ namespace LSMES_5ANEW_PLUS.Business
                     StringBuilder barcodes = new StringBuilder();
                     for (int i = 0; i < batteryList.data.Count; ++i)
                     {
-                        sql.Append(string.Format("INSERT INTO SCUD_SYNCBATTERY_LOG (HANDLE_TASK,HANDLE_SEND_INFO,cellSn,voltageValue,testDate,PB_SN,CO_ITEM_CODE,CO_ITEM_NAME,CO_ITEM_SPEC,PN_SN,GEAR) VALUES ('{0}','{1}',{2},'{3}','{4}','{5}','{6}','{7}','{8}','{9}','{10}');", task.HANDLE, handle, batteryList.data[i].cellSn, batteryList.data[i].voltageValue, batteryList.data[i].testDate, batteryList.data[i].PB_SN, batteryList.data[i].CO_ITEM_CODE, batteryList.data[i].CO_ITEM_NAME, batteryList.data[i].CO_ITEM_SPEC, batteryList.data[i].PN_SN, batteryList.data[i].GEAR));
+                        sql.Append(string.Format("INSERT INTO SCUD_SYNCBATTERY_LOG (HANDLE_TASK,HANDLE_SEND_INFO,cellSn,voltageValue,testDate,PB_SN,CO_ITEM_CODE,CO_ITEM_NAME,CO_ITEM_SPEC,PN_SN,GEAR) VALUES ('{0}','{1}','{2}','{3}','{4}','{5}','{6}','{7}','{8}','{9}','{10}');", task.HANDLE, handle, batteryList.data[i].cellSn, batteryList.data[i].voltageValue, batteryList.data[i].testDate, batteryList.data[i].PB_SN, batteryList.data[i].CO_ITEM_CODE, batteryList.data[i].CO_ITEM_NAME, batteryList.data[i].CO_ITEM_SPEC, batteryList.data[i].PN_SN, batteryList.data[i].GEAR));
                         barcodes.Append(string.Format("'{0}',",batteryList.data[i].cellSn));
                     }
                     SqlCommand comm = new SqlCommand(sql.ToString(), conn);
+                    comm.CommandTimeout = 120;
                     SqlTransaction tran = conn.BeginTransaction();
                     comm.Transaction = tran;
                     int rowAffect = comm.ExecuteNonQuery();
@@ -3753,6 +4082,32 @@ namespace LSMES_5ANEW_PLUS.Business
                 return 0;
             }
         }
+        public int BackupSyncBatteryBySmartFurniture(SmartFurnitureSCUD battery, SCUDTask task, string handle)
+        {
+            if (battery==null || task==null || string.IsNullOrEmpty(handle))
+            {
+                return 0;
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                if (conn.State != ConnectionState.Open)
+                {
+                    throw new Exception("SyncSCUD::BackupSyncBatteryBySmartFurniture => SyncRemote database can not be open.");
+                }
+                SqlCommand comm = new SqlCommand($"INSERT INTO SCUD_SYNCBATTERY (HANDLE_TASK,sn,ocvb_voltage,ocvb_test_time,ocvb_inter_resi,capacity,grade,k_value,thickness,supplier_no,ocv1,ocv1_test_time,ir1,ocv2,ocv2_test_time,ir2,test_result,lot) VALUES ('{task.HANDLE}','{battery.sn}','{battery.ocvb_voltage}','{battery.ocvb_test_time}','{battery.ocvb_inter_resi}','{battery.capacity}','{battery.grade}','{battery.k_value}','{battery.thickness}','{battery.supplier_no}','{battery.ocv1}','{battery.ocv1_test_time}','{battery.ir1}','{battery.ocv2}','{battery.ocv2_test_time}','{battery.ir2}','{battery.test_result}','{battery.lot}');DELETE FROM SCUD_SYNCBATTERY WHERE SN = '{battery.sn}';", conn);
+                try
+                {
+                    comm.ExecuteNonQuery();
+                    return 1;
+                }
+                catch(Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return 0;
+                }
+            }
+        }
         /// <summary>
         /// 写入 SendInfo
         /// </summary>
@@ -3795,8 +4150,9 @@ namespace LSMES_5ANEW_PLUS.Business
         /// </summary>
         /// <param name="task">任务对象</param>
         /// <returns>成功数量</returns>
-        public int SyncData(ref SCUDTask task)
+        public int SyncData(SCUDTask task)
         {
+            int pos = 0;
             try
             {
                 if (task == null || string.IsNullOrEmpty(task.HANDLE))
@@ -3827,6 +4183,7 @@ namespace LSMES_5ANEW_PLUS.Business
                         StringBuilder sql = new StringBuilder();
                         while (reader.Read())
                         {
+                            ++pos;
                             BatteryPowerBankSCUD battery = new BatteryPowerBankSCUD();
                             battery.cellSn = reader["cellSn"].ToString();
                             battery.voltageValue = double.Parse(reader["voltageValue"].ToString());
@@ -3837,6 +4194,7 @@ namespace LSMES_5ANEW_PLUS.Business
                             battery.CO_ITEM_SPEC = reader["CO_ITEM_SPEC"].ToString();
                             battery.PN_SN = reader["PN_SN"].ToString();
                             battery.GEAR = reader["GEAR"].ToString();
+                            battery.IRValue = reader["IRValue"].ToString();
                             batteryList.data.Add(battery);
                             if (batteryList.data.Count % 100 == 0)
                             {
@@ -3872,6 +4230,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     // 笔记本
                     else if (task.DEPT.ToUpper() == "LAPTOP")
                     {
+                        ++pos;
                         List<BatteryLaptopSCUD> batteryList = new List<BatteryLaptopSCUD>();
                         StringBuilder sql = new StringBuilder();
                         while (reader.Read())
@@ -3917,12 +4276,45 @@ namespace LSMES_5ANEW_PLUS.Business
                         }
                         reader.Close();
                     }
-                    UpdateTask(ref task, "准备就绪");
+                    else if (task.DEPT.ToUpper() == "SMART FURNITURE")
+                    {
+                        task.TOTAL = 0;
+                        SmartFurnitureSCUD battery = new SmartFurnitureSCUD();
+                        while (reader.Read())
+                        {
+                            battery.sn = reader["sn"].ToString();
+                            battery.ocvb_voltage = reader["ocvb_voltage"].ToString();
+                            battery.ocvb_test_time = Convert.ToDateTime(reader["ocvb_test_time"]).ToString("yyyy-MM-dd hh:mm:ss");
+                            battery.ocvb_inter_resi = reader["ocvb_inter_resi"].ToString();
+                            battery.capacity = reader["capacity"].ToString();
+                            battery.grade = reader["grade"].ToString();
+                            battery.k_value = reader["k_value"].ToString();
+                            battery.thickness = reader["thickness"].ToString();
+                            battery.supplier_no = reader["supplier_no"].ToString();
+                            battery.ocv1 = reader["ocv1"].ToString();
+                            battery.ocv1_test_time = reader["ocv1_test_time"].ToString();
+                            battery.ir1 = reader["ir1"].ToString();
+                            battery.ocv2 = reader["ocv2"].ToString();
+                            battery.ocv2_test_time = reader["ocv2_test_time"].ToString();
+                            battery.ir2 = reader["ir2"].ToString();
+                            battery.test_result = reader["test_result"].ToString();
+                            battery.lot = reader["lot"].ToString();
+                            task.COMPLETED = 1;
+                            string json = JsonConvert.SerializeObject(battery);
+                            string handle = CreateSendInfo(json, task);
+                            task.TOTAL += BackupSyncBatteryBySmartFurniture(battery, task, handle);
+                        }
+                    }
                     return task.TOTAL;
                 }
             }
             catch (Exception ex)
             {
+                StackFrame sf = new StackFrame(true);
+                int lineNumber = sf.GetFileLineNumber();
+                int colNumber = sf.GetFileColumnNumber();
+                string fileName = sf.GetFileName();
+                string methodName = sf.GetMethod().Name;
                 SysLog log = new SysLog(ex.Message);
                 UpdateTask(ref task, "创建发送数据失败，Failed to generate json");
                 return 0;
@@ -3959,15 +4351,30 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         WebSOAP soap = new WebSOAP();
-                        SCUD_ResponseResult result = new SCUD_ResponseResult();
-                        result = soap.SCUD_QuerySoapWebService(task.URI, string.Format("dbtype={0}&type={1}&json={2}", task.DBTYPE, task.TYPE, reader["CONTENTS"].ToString()));
-                        if (result.msg.Contains("传输成功"))
+                        if (task.DEPT == "SMART FURNITURE")
                         {
-                            BackupSendInfo(task, reader["HANDLE"].ToString(), result.data.ToString());
+                            ResultSmartFurnitureSCUD result = soap.SCUD_QuerySoapWebApi(task.URI, reader["CONTENTS"].ToString());
+                            if (result.M_RESULT_FLAG== "OK")
+                            {
+                                BackupSendInfo(task, reader["HANDLE"].ToString(), result.HANDLE_RECIEVED);
+                            }
+                            else
+                            {
+                                UpdateTask(ref task, "失败");
+                            }
                         }
                         else
                         {
-                            UpdateTask(ref task, "失败");
+                            SCUD_ResponseResult result = new SCUD_ResponseResult();
+                            result = soap.SCUD_QuerySoapWebService(task.URI, string.Format("dbtype={0}&type={1}&json={2}", task.DBTYPE, task.TYPE, reader["CONTENTS"].ToString()));
+                            if (result.msg.Contains("传输成功"))
+                            {
+                                BackupSendInfo(task, reader["HANDLE"].ToString(), result.data.ToString());
+                            }
+                            else
+                            {
+                                UpdateTask(ref task, "失败");
+                            }
                         }
                     }
                     UpdateTask(ref task, "结束");
@@ -4078,7 +4485,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         emailList.Append(reader[0].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     reader.Close();
                     //发送邮件
@@ -4181,6 +4588,44 @@ namespace LSMES_5ANEW_PLUS.Business
     }
     public class SyncTWS
     {
+        /// <summary>
+        /// 获取型号信息
+        /// </summary>
+        /// <returns></returns>
+        public List<Item_no> Item_no()
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncTWS::Item_no => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand("SELECT BOM,ITEM FROM TWS_CONFIG WHERE IS_CURRENT = 'Y' GROUP BY BOM,ITEM;", conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows)
+                    {
+                        throw new Exception("The item information does not exist.");
+                    }
+                    List<Item_no> items = new List<global::Item_no>();
+                    while (reader.Read())
+                    {
+                        Item_no item = new Item_no();
+                        item.BOMNO = reader["BOM"].ToString();
+                        item.ITEM_NO = reader["ITEM"].ToString();
+                        items.Add(item);
+                    }
+                    return items;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return null;
+            }
+        }
         /// <summary>
         /// 创建任务
         /// </summary>
@@ -4639,7 +5084,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     while (reader.Read())
                     {
                         emailList.Append(reader[0].ToString());
-                        emailList.Append(";");
+                        emailList.Append(",");
                     }
                     reader.Close();
                     //发送邮件
@@ -4839,6 +5284,11 @@ namespace LSMES_5ANEW_PLUS.Business
     public class TaskManagement
     {
         private Tasks mTask;
+        protected bool IsValidUuid(string uuid)
+        {
+            string pattern = @"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
+            return Regex.IsMatch(uuid, pattern);
+        }
         /// <summary>
         /// 创建回传管理任务
         /// </summary>
@@ -4883,6 +5333,8 @@ namespace LSMES_5ANEW_PLUS.Business
                     SqlCommand comm = new SqlCommand(string.Format("INSERT INTO TASK (HANDLE_CUSTOMER,ITEM_NO,QTY_SFC,QTY_TOTAL,STATE,CREATED_USER,CREATED_DATE_TIME) OUTPUT INSERTED.HANDLE VALUES ('{0}','{1}','{2}','{3}','{4}','{5}','{6}');", mTask.HANDLE_CUSTOMER, mTask.ITEM_NO, SFCList.Count, mTask.QTY_TOTAL, mTask.STATE, mTask.CREATED_USER, mTask.CREATED_DATE_TIME), conn);
                     string handle_task = comm.ExecuteScalar().ToString();
                     if (string.IsNullOrEmpty(handle_task)) throw new Exception("TaskManagement::CreateTask => fail to create task.");
+                    comm.CommandText = string.Format("INSERT INTO TASK_LOG (HANDLE_TASK,STATE) VALUES ('{0}','{1}');", handle_task, mTask.STATE);
+                    comm.ExecuteNonQuery();
                     mTask.HANDLE = handle_task;
                     StringBuilder sql = new StringBuilder();
                     for (int i = 0; i < SFCList.Count; ++i)
@@ -4983,10 +5435,11 @@ namespace LSMES_5ANEW_PLUS.Business
         /// <summary>
         /// 更新任务状态
         /// </summary>
-        /// <param name="handle_task">任务 HANDLE</param>
+        /// <param name="handle_task">任务 HANDLE 或者 SN</param>
         /// <param name="status">状态</param>
+        /// <param name="taskno">实际各客户回传任务编号</param>
         /// <returns></returns>
-        public Tasks UpdateTask(string handle_task, string status, string updated_user)
+        public Tasks UpdateTask(string handle_task, string status, string updated_user, string taskno)
         {
             try
             {
@@ -5007,11 +5460,18 @@ namespace LSMES_5ANEW_PLUS.Business
                         throw new Exception("TaskManagement::UpdateTask => SyncRemote db can not be open.");
                     }
                     Tasks task = new Tasks();
-                    SqlCommand comm = new SqlCommand(string.Format("UPDATE TASK SET STATE = '{0}',UPDATED_USER = '{2}',UPDATED_DATE_TIME = '{3}' WHERE HANDLE = '{1}';", status, handle_task, task.UPDATED_USER, task.UPDATED_DATE_TIME), conn);
+                    string sql = null;
+                    if (IsValidUuid(handle_task))
+                        sql = string.Format("UPDATE TASK SET STATE = '{0}',UPDATED_USER = '{2}',UPDATED_DATE_TIME = '{3}',HANDLE_TASK = '{4}' WHERE HANDLE = '{1}';", status, handle_task, task.UPDATED_USER, task.UPDATED_DATE_TIME, taskno);
+                    else
+                        sql = string.Format("UPDATE TASK SET STATE = '{0}',UPDATED_USER = '{2}',UPDATED_DATE_TIME = '{3}',HANDLE_TASK = '{4}' WHERE SN = '{1}';", status, handle_task, task.UPDATED_USER, task.UPDATED_DATE_TIME, taskno);
+                    SqlCommand comm = new SqlCommand(sql, conn);
                     if (comm.ExecuteNonQuery() != 1)
                     {
                         throw new Exception("TaskManagement::UpdateTask => fail to update task.");
                     }
+                    comm.CommandText = string.Format("INSERT INTO TASK_LOG (HANDLE_TASK,STATE,CREATED_USER) VALUES ('{0}','{1}','{2}');", handle_task, status, updated_user);
+                    comm.ExecuteNonQuery();
                     comm.CommandText = string.Format("SELECT * FROM TASK WHERE HANDLE = '{0}';", handle_task);
                     SqlDataReader reader = comm.ExecuteReader();
                     if (!reader.HasRows)
@@ -5030,6 +5490,44 @@ namespace LSMES_5ANEW_PLUS.Business
                     }
                     reader.Close();
                     return task;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 获取指定用户 ID 的邮件地址
+        /// </summary>
+        /// <param name="customerid"></param>
+        /// <returns></returns>
+        public List<EmailInfo> GetEmails(string handle_customer)
+        {
+            if (string.IsNullOrEmpty(handle_customer)) return null;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::EmailAddress => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT C.HANDLE,C.CUSTOMER,EC.USERNAME,EMAIL FROM EMAIL_GROUP eg INNER JOIN EMAIL_CONFIG ec ON EG.HANDLE_EMAIL = EC.HANDLE INNER JOIN CUSTOMER c ON EG.HANDLE_CUSTOMER = C.HANDLE WHERE C.HANDLE = '{0}';", handle_customer), conn);
+                    List<EmailInfo> emailList = new List<EmailInfo>();
+                    SqlDataReader reader = comm.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        EmailInfo info = new EmailInfo();
+                        info.CUSTOMER_ID = reader["HANDLE"].ToString();
+                        info.CUSTOMER = reader["CUSTOMER"].ToString();
+                        info.USERNAME = reader["USERNAME"].ToString();
+                        info.EMAIL = reader["EMAIL"].ToString();
+                        emailList.Add(info);
+                    }
+                    return emailList;
                 }
                 catch (Exception ex)
                 {
@@ -5083,7 +5581,7 @@ namespace LSMES_5ANEW_PLUS.Business
         /// <summary>
         /// 获取任务通过任务 HANDLE
         /// </summary>
-        /// <param name="handle_task">任务 HANDLE</param>
+        /// <param name="handle_task">任务 HANDLE 或者 SN</param>
         /// <returns></returns>
         public Tasks GetTask(string handle_task)
         {
@@ -5097,9 +5595,9 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("TaskManagement::CreateSchedule => SyncRemote db can not be open.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT tk.HANDLE HANDLE_TASK,sg.HANDLE HANDLE_SCHEDULE_GROUP,c.HANDLE HANDLE_CUSTOMER,tk.STATE STATE_TASK,tk.ITEM_NO,tk.QTY_TOTAL,tk.CREATED_USER,tk.CREATED_DATE_TIME,tk.UPDATED_USER,tk.UPDATED_DATE_TIME FROM TASK tk INNER JOIN SCHEDULE_GROUP sg ON tk.HANDLE = sg.HANDLE_TASK AND sg.STATE IS NULL INNER JOIN CUSTOMER c ON tk.HANDLE_CUSTOMER = c.HANDLE WHERE tk.HANDLE = '{0}';", handle_task), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT tk.HANDLE HANDLE_TASK,sg.HANDLE HANDLE_SCHEDULE_GROUP,c.HANDLE HANDLE_CUSTOMER,tk.STATE STATE_TASK,tk.ITEM_NO,tk.QTY_TOTAL,tk.CREATED_USER,tk.CREATED_DATE_TIME,tk.UPDATED_USER,tk.UPDATED_DATE_TIME,C.CUSTOMER,TK.SN FROM TASK tk INNER JOIN SCHEDULE_GROUP sg ON tk.HANDLE = sg.HANDLE_TASK AND sg.STATE IS NULL INNER JOIN CUSTOMER c ON tk.HANDLE_CUSTOMER = c.HANDLE WHERE tk.HANDLE = '{0}';", handle_task), conn);
                     SqlDataReader reader = comm.ExecuteReader();
-                    if (reader.HasRows) throw new Exception("TaskManagement::GetTask => Task is not exist.");
+                    if (!reader.HasRows) throw new Exception("TaskManagement::GetTask => Task is not exist.");
                     Tasks task = new Tasks();
                     while (reader.Read())
                     {
@@ -5113,9 +5611,11 @@ namespace LSMES_5ANEW_PLUS.Business
                         task.CREATED_DATE_TIME = reader["CREATED_DATE_TIME"].ToString();
                         task.UPDATED_USER = reader["UPDATED_USER"].ToString();
                         task.UPDATED_DATE_TIME = reader["UPDATED_DATE_TIME"].ToString();
+                        task.CUSTOMER = reader["CUSTOMER"].ToString();
+                        task.SN = reader["SN"].ToString();
                     }
                     reader.Close();
-                    comm.CommandText = string.Format("SELECT * FROM TASK_DETAILS td WHERE STATE IS NULL AND HANDLE_TASK = '{0}';");
+                    comm.CommandText = string.Format("SELECT * FROM TASK_DETAILS td WHERE STATE IS NULL AND HANDLE_TASK = '{0}';", task.HANDLE);
                     reader = comm.ExecuteReader();
                     while (reader.Read())
                     {
@@ -5329,6 +5829,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         try
                         {
+                            if (reader["CUSTOMER"].ToString().Split('-')[0] == "测试客户" || reader["CUSTOMER"].ToString().Split('-')[0] == "POLE") continue;
                             Customers.Add(reader["CUSTOMER"].ToString().Split('-')[0], tablename);
                         }
                         catch (Exception)
@@ -5514,7 +6015,7 @@ namespace LSMES_5ANEW_PLUS.Business
         /// <param name="tray">栈板编号</param>
         /// <param name="barcode">电池码号</param>
         /// <returns></returns>
-        public List<Tasks> GetTasks(string datetime, string tray, string barcode)
+        public List<Tasks> GetTasks(string datetime, string tray, string barcode, string customer, string taskno)
         {
             using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
             {
@@ -5527,9 +6028,12 @@ namespace LSMES_5ANEW_PLUS.Business
                     }
 
                     //barcode = AdapterCondition(barcode, "string");
-
-                    StringBuilder sql = new StringBuilder("SELECT T.HANDLE,T.HANDLE_SYNC,T.SN,C.CUSTOMER,T.ITEM_NO,QTY_SFC,QTY_TOTAL,QTY_SEND,TD.HANDLE HANDLE2,TD.SFC,TD.QTY,T.STATE,TD.CUSTOMER_ID CUSTOMER2_ID,TD.CUSTOMER CUSTOMER2,T.CREATED_USER,T.CREATED_DATE_TIME,TD.CREATED_USER CREATED_USER2,TD.CREATED_DATE_TIME CREATED_DATE_TIME2 FROM TASK T INNER JOIN TASK_DETAILS TD ON T.HANDLE = TD.HANDLE_TASK INNER JOIN CUSTOMER C ON T.HANDLE_CUSTOMER = C.HANDLE WHERE 1 = 1 ");
-
+                    string _sql = "SELECT T.HANDLE,T.HANDLE_SYNC,T.SN,C.CUSTOMER,T.ITEM_NO,QTY_SFC,QTY_TOTAL,QTY_SEND,TD.HANDLE HANDLE2,TD.SFC,TD.QTY,T.STATE,TD.CUSTOMER_ID CUSTOMER2_ID,TD.CUSTOMER CUSTOMER2,T.CREATED_USER,T.CREATED_DATE_TIME,TD.CREATED_USER CREATED_USER2,TD.CREATED_DATE_TIME CREATED_DATE_TIME2 FROM TASK T INNER JOIN TASK_DETAILS TD ON T.HANDLE = TD.HANDLE_TASK INNER JOIN CUSTOMER C ON T.HANDLE_CUSTOMER = C.HANDLE WHERE {0} T.STATE <> '结束' ";
+                    if (string.IsNullOrEmpty(customer))
+                        _sql = string.Format(_sql, "");
+                    else
+                        _sql = string.Format(_sql, "C.CUSTOMER = '" + customer + "' AND ");
+                    StringBuilder sql = new StringBuilder(_sql);
                     datetime = AdapterCondition("T.CREATED_DATE_TIME", datetime, "datetime");
                     tray = AdapterCondition("SFC", tray, "string");
 
@@ -5542,6 +6046,11 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         sql.Append(" AND ");
                         sql.Append(tray);
+                    }
+                    if (!string.IsNullOrEmpty(taskno))
+                    {
+                        sql.Append(" AND T.SN = ");
+                        sql.Append(taskno);
                     }
                     sql.Append(" ORDER BY SN DESC;");
                     SqlCommand comm = new SqlCommand(sql.ToString(), conn);
@@ -5797,6 +6306,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     }
                 }
             }
+            hashOperations.Add("包装", "A");
             return hashOperations;
         }
         /// <summary>
@@ -5809,6 +6319,12 @@ namespace LSMES_5ANEW_PLUS.Business
         {
             if (string.IsNullOrEmpty(pipeline)) return null;
             Hashtable hashField = new Hashtable();
+            if (operation == "A")
+            {
+                hashField.Add("包装箱号", "BOXID");
+                hashField.Add("栈板号", "PALLETNO");
+                return hashField;
+            }
             string sql = string.Format("SELECT COLUMN_NAME,COLUMN_DESC FROM Z_CO_CALCULATE_COLUMN WHERE OPERATION = '{0}' AND CATEGORY = 'SFC' ORDER BY SEQ ASC;", operation);
             OdbcDataReader reader;
             if (pipeline == "WJ1")
@@ -5829,7 +6345,6 @@ namespace LSMES_5ANEW_PLUS.Business
                             hashField.Add(reader["COLUMN_NAME"] + " / " + reader["COLUMN_DESC"], reader["COLUMN_NAME"]);
                         }
                         reader.Close();
-
                     }
                     catch (Exception ex)
                     {
@@ -5856,8 +6371,6 @@ namespace LSMES_5ANEW_PLUS.Business
                             hashField.Add(reader["COLUMN_NAME"] + " / " + reader["COLUMN_DESC"], reader["COLUMN_NAME"]);
                         }
                         reader.Close();
-                        reader = comm.ExecuteReader();
-
                     }
                     catch (Exception ex)
                     {
@@ -5935,6 +6448,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     }
                     StringBuilder fields = new StringBuilder();
                     StringBuilder values = new StringBuilder();
+                    string pipeline = null;
                     foreach (PropertyInfo item in ds.GetType().GetProperties())
                     {
                         if (item.Name == "HANDLE" || item.Name == "ITEM" || item.Name == "BOMNO" || item.Name == "CREATED_DATE_TIME")
@@ -5955,9 +6469,16 @@ namespace LSMES_5ANEW_PLUS.Business
                                 {
                                     if (item.GetValue(ds).ToString() != "")
                                     {
-                                        values.Append("'Z_");
-                                        values.Append(item.GetValue(ds));
-                                        values.Append("_SFC_PARAM'");
+                                        if (!item.GetValue(ds).ToString().Contains("_SFC_PARAM") && !item.GetValue(ds).ToString().Contains("A"))
+                                        {
+                                            values.Append("'Z_");
+                                            values.Append(item.GetValue(ds));
+                                            values.Append("_SFC_PARAM'");
+                                        }
+                                        else
+                                        {
+                                            values.Append("'" + item.GetValue(ds) + "'");
+                                        }
                                     }
                                     else
                                     {
@@ -5970,7 +6491,7 @@ namespace LSMES_5ANEW_PLUS.Business
                                     fields.Append("LOGIC");
                                     fields.Append(",");
                                     values.Append("'");
-                                    values.Append(GetIndexHandle());
+                                    values.Append(GetIndexHandle(ds.PIPELINE));
                                     values.Append("'");
                                 }
                                 else
@@ -6021,7 +6542,7 @@ namespace LSMES_5ANEW_PLUS.Business
                     {
                         throw new Exception("TaskManagement::GetHandleItem => SyncRemote db can not be open.");
                     }
-                    SqlCommand comm = new SqlCommand(string.Format("SELECT HANDLE FROM ITEM WHERE STATE = '1' AND ITEM = '{0}'", item), conn);
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT CONVERT(NVARCHAR(50),HANDLE) FROM ITEM WHERE STATE = '1' AND ITEM = '{0}'", item), conn);
                     SqlDataReader reader = comm.ExecuteReader();
                     reader.Read();
                     return reader[0].ToString();
@@ -6151,28 +6672,11 @@ namespace LSMES_5ANEW_PLUS.Business
                 return result;
             }
         }
-        //public Hashtable DataTemplateColumns(string item, string bomno)
-        //{
-        //    using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
-        //    {
-        //        conn.Open();
-        //        if (conn.State != ConnectionState.Open)
-        //        {
-        //            throw new Exception("TaskManagement::DataTemplateColumns => SyncRemote db can not be open.");
-        //        }
-        //        SqlCommand comm = new SqlCommand(string.Format("SELECT I.CUSTOMER,DS.DATA_PROPERTY_NAME,DS.DATATABLE,DS.LSL,DS.USL,DS.UNIT,DS.REMARKS FROM DATA_SOURCES DS INNER JOIN ITEM I ON DS.HANDLE_ITEM = I.HANDLE WHERE I.ITEM = '{0}' AND I.BOMNO = '{1}' AND DS.STATE = '1' AND I.STATE = '1';", item, bomno), conn);
-        //        SqlDataReader reader = comm.ExecuteReader();
-        //        while (reader.Read())
-        //        {
-
-        //        }
-        //    }
-        //}
         /// <summary>
         /// 获取索引
         /// </summary>
         /// <returns></returns>
-        protected string GetIndexHandle()
+        protected string GetIndexHandle(string pipeline)
         {
             using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
             {
@@ -6181,7 +6685,7 @@ namespace LSMES_5ANEW_PLUS.Business
                 {
                     throw new Exception("TaskManagement::GetIndex => SyncRemote db can not be open.");
                 }
-                SqlCommand comm = new SqlCommand("SELECT HANDLE FROM LOGIC WHERE STATE = '1';", conn);
+                SqlCommand comm = new SqlCommand(string.Format("SELECT CONVERT(NVARCHAR(50),HANDLE) FROM LOGIC WHERE PIPELINE = '{0}' AND STATE = '1';", pipeline), conn);
                 SqlDataReader reader = comm.ExecuteReader();
                 if (reader.HasRows)
                 {
@@ -6191,5 +6695,1067 @@ namespace LSMES_5ANEW_PLUS.Business
                 return null;
             }
         }
+        /// <summary>
+        /// 只进行统计与通知动作，不负责状态更新
+        /// </summary>
+        /// <param name="taskno">任务编号或handle</param>
+        public void Completed(string taskno)
+        {
+            if (string.IsNullOrEmpty(taskno))
+            {
+                SysLog log = new SysLog("TaskManagement::Complted => taskno is empty.");
+                return;
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::Complted => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand();
+                    comm.Connection = conn;
+                    comm.CommandText = string.Format("SELECT T.SN,C.CUSTOMER,I.ITEM,I.BOMNO,TD.SFC,TD.QTY,T.CREATED_DATE_TIME FROM TASK T INNER JOIN ITEM I ON T.ITEM_NO = I.ITEM INNER JOIN TASK_DETAILS TD ON T.HANDLE  = TD.HANDLE_TASK INNER JOIN CUSTOMER C ON T.HANDLE_CUSTOMER = C.HANDLE WHERE T.SN = {0};", taskno);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception(string.Format("TaskManagement::Complted => TaskNo(0#) is not exist.", taskno));
+                    string customer = null;
+                    HtmlTable tWeb = new HtmlTable();
+                    tWeb.Title = "任务明细：";
+                    tWeb.TH = "任务编号";
+                    tWeb.TH = "客户";
+                    tWeb.TH = "料号";
+                    tWeb.TH = "型号";
+                    tWeb.TH = "栈板编号";
+                    tWeb.TH = "数量";
+                    tWeb.TH = "任务启动时间";
+                    while (reader.Read())
+                    {
+                        tWeb.TD = reader["SN"].ToString();
+                        tWeb.TD = reader["CUSTOMER"].ToString();
+                        customer = reader["CUSTOMER"].ToString();
+                        tWeb.TD = reader["ITEM"].ToString();
+                        tWeb.TD = reader["BOMNO"].ToString();
+                        tWeb.TD = reader["SFC"].ToString();
+                        tWeb.TD = reader["QTY"].ToString();
+                        tWeb.TD = reader["CREATED_DATE_TIME"].ToString();
+                        tWeb.TR = tWeb.TD;
+                    }
+                    tWeb.TABLE = tWeb.TR;
+                    reader.Close();
+                    comm.CommandText = string.Format("SELECT ROW_NUMBER() OVER(ORDER BY TL.CREATED_DATE_TIME) 提醒次数, T.SN 任务编号,TL.STATE 任务阶段,CASE TL.STATE WHEN '启动' THEN '回传系统提醒：通知产品负责人有新回传任务，提示尽快查看回传数据！' WHEN '确认中' THEN '回传系统提醒：产品负责人已查询回传数据但并未完成确认，提示尽快完成确认！' END 回传系统自动提醒内容,TL.CREATED_DATE_TIME FROM TASK T INNER JOIN TASK_LOG TL ON T.HANDLE = TL.HANDLE_TASK WHERE T.SN = '{0}' ORDER BY TL.CREATED_DATE_TIME ASC;", taskno);
+                    reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception(string.Format("TaskManagement::Complted => TaskNo(0#) is not exist.", taskno));
+                    tWeb.Title = "任务执行情况：";
+                    tWeb.TH = "提醒次数";
+                    tWeb.TH = "任务编号";
+                    tWeb.TH = "阶段";
+                    tWeb.TH = "提醒内容	";
+                    tWeb.TH = "提醒时间";
+                    while (reader.Read())
+                    {
+                        tWeb.TD = reader["提醒次数"].ToString();
+                        tWeb.TD = reader["任务编号"].ToString();
+                        tWeb.TD = reader["任务阶段"].ToString();
+                        tWeb.TD = reader["回传系统自动提醒内容"].ToString();
+                        tWeb.TD = reader["CREATED_DATE_TIME"].ToString();
+                        tWeb.TR = tWeb.TD;
+                    }
+                    tWeb.TABLE = tWeb.TR;
+                    reader.Close();
+                    comm.CommandText = string.Format("SELECT E.USERNAME,E.EMAIL FROM CUSTOMER C INNER JOIN EMAIL_GROUP G ON C.HANDLE = G.HANDLE_CUSTOMER INNER JOIN EMAIL_CONFIG E ON G.HANDLE_EMAIL = E.HANDLE WHERE CUSTOMER = '{0}';", customer);
+                    reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception(string.Format("TaskManagement::Complted => user email is not exist.", taskno));
+                    StringBuilder emailList = new StringBuilder();
+                    while (reader.Read())
+                    {
+                        emailList.Append(reader[1].ToString());
+                        emailList.Append(",");
+                    }
+                    reader.Close();
+                    //发送邮件
+                    Mail.SendMail(emailList.ToString(), System.Configuration.ConfigurationManager.AppSettings["ExchangeUID"], System.Configuration.ConfigurationManager.AppSettings["ExchangePWD"], System.Configuration.ConfigurationManager.AppSettings["ExchangeDomain"], customer + " 数据发送任务", tWeb.Html);
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return;
+                }
+            }
+        }
+        /// <summary>
+        /// 获取邮件通知的用户清单，无用户名及邮件时，取全部
+        /// </summary>
+        /// <param name="username"></param>
+        /// <param name="email"></param>
+        /// <returns></returns>
+        public List<UsersInfos> GetUsers(string username, string email)
+        {
+            StringBuilder sql = new StringBuilder("SELECT * FROM EMAIL_CONFIG WHERE 1 = 1 ");
+            if (!string.IsNullOrEmpty(username))
+            {
+                sql.Append($" AND USERNAME = '{username}' ");
+            }
+            if (!string.IsNullOrEmpty(email))
+            {
+                sql.Append($" AND EMAIL = '{email}' ");
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::GetUsers => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand(sql.ToString(), conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("No data was queried from data table EMAIL_CONFIG");
+                    List<UsersInfos> userList = new List<UsersInfos>();
+                    while (reader.Read())
+                    {
+                        UsersInfos user = new UsersInfos();
+                        user.HANDLE = reader["HANDLE"].ToString();
+                        user.USERNAME = reader["USERNAME"].ToString();
+                        user.PASSWORD = reader["PASSWORD"].ToString();
+                        user.STATE = reader["STATUS"].ToString();
+                        user.EMAIL = reader["EMAIL"].ToString();
+                        user.DEPT = reader["DEPARTMENT"].ToString();
+                        user.REMARKS = reader["REMARKS"].ToString();
+                        user.CREATED_DATE_TIME = reader["CREATED_DATE_TIME"].ToString();
+                        userList.Add(user);
+                    }
+                    reader.Close();
+                    return userList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 获取客户
+        /// </summary>
+        /// <param name="customer"></param>
+        /// <returns></returns>
+        public List<CUSTOMERS> GetCustomers(string customer)
+        {
+            StringBuilder sql = new StringBuilder("SELECT * FROM CUSTOMER WHERE 1 = 1 ");
+            if (!string.IsNullOrEmpty(customer))
+            {
+                sql.Append($" AND CUSTOMER = '{customer}'");
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::GetUsers => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand(sql.ToString(), conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("No data was queried from data table CUSTOMER");
+                    List<CUSTOMERS> customerList = new List<CUSTOMERS>();
+                    while (reader.Read())
+                    {
+                        CUSTOMERS _customer = new CUSTOMERS();
+                        _customer.HANDLE = reader["HANDLE"].ToString();
+                        _customer.CUSTOMER = reader["CUSTOMER"].ToString();
+                        _customer.CREATED_DATE_TIME = reader["CREATED_DATE_TIME"].ToString();
+                        customerList.Add(_customer);
+                    }
+                    reader.Close();
+                    return customerList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 获取用户邮件与客户绑定关系
+        /// </summary>
+        /// <param name="customer"></param>
+        /// <param name="user"></param>
+        /// <returns></returns>
+        public List<EMAIL_GROUP> GetEmailGroup(string customer, string user)
+        {
+            StringBuilder sql = new StringBuilder("SELECT EG.HANDLE HANDLE_GROUP, EG.HANDLE_CUSTOMER, EG.HANDLE_EMAIL, C.CUSTOMER, EC.USERNAME FROM EMAIL_GROUP EG INNER JOIN CUSTOMER C ON EG.HANDLE_CUSTOMER = C.HANDLE INNER JOIN EMAIL_CONFIG EC ON EG.HANDLE_EMAIL = EC.HANDLE WHERE 1 = 1 ");
+            if (!string.IsNullOrEmpty(user))
+            {
+                sql.Append($" AND USERNAME = '{user}' ");
+            }
+            if (!string.IsNullOrEmpty(customer))
+            {
+                sql.Append($" AND CUSTOMER = '{customer}' ");
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("UsersInfos::GetUsers => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand(sql.ToString(), conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("TaskManagement::GetEmailGroup => SyncRemote db can not be open.");
+                    List<EMAIL_GROUP> groupList = new List<EMAIL_GROUP>();
+                    while (reader.Read())
+                    {
+                        EMAIL_GROUP group = new EMAIL_GROUP();
+                        group.HANDLE_CUSTOMER = reader["HANDLE_CUSTOMER"].ToString();
+                        group.HANDLE_EMAIL = reader["HANDLE_EMAIL"].ToString();
+                        group.HANDLE_GROUP = reader["HANDLE_GROUP"].ToString();
+                        group.CUSTOMER = reader["CUSTOMER"].ToString();
+                        group.USERNAME = reader["USERNAME"].ToString();
+                        groupList.Add(group);
+                    }
+                    reader.Close();
+                    return groupList;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        /// <summary>
+        /// 新建客户
+        /// </summary>
+        /// <param name="customer"></param>
+        /// <returns></returns>
+        public ResultTask AddCustomer(string customer)
+        {
+            ResultTask result = new ResultTask();
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(customer)) new Exception("customer is empty.");
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::AddCustomer => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"BEGIN IF NOT EXISTS (SELECT * FROM CUSTOMER WHERE CUSTOMER = '{customer}') BEGIN INSERT INTO CUSTOMER (CUSTOMER) VALUES ('{customer}') END END", conn);
+                    if (comm.ExecuteNonQuery() == 1)
+                        result.RESULT = "success";
+                    else
+                    {
+                        result.RESULT = "fail";
+                        result.MSG = "客户已存在！";
+                    }
+
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    result.RESULT = "fail";
+                    result.MSG = ex.Message;
+                    return result;
+                }
+            }
+        }
+        /// <summary>
+        /// 新建客户
+        /// </summary>
+        /// <param name="user"></param>
+        /// <returns></returns>
+        public ResultTask AddUser(UsersInfos user)
+        {
+            ResultTask result = new ResultTask();
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    if (user == null) new Exception("user is empty.");
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::AddUser => SyncRemote db can not be open.");
+                    }
+                    string pwd = string.IsNullOrEmpty(user.PASSWORD) ? ConfigurationManager.AppSettings["KPK_Performance"].Trim() : user.PASSWORD;
+                    string status = string.IsNullOrEmpty(user.STATE) ? "NULL" : "'" + user.STATE + "'";
+                    string remarks = string.IsNullOrEmpty(user.REMARKS) ? "NULL" : "'" + user.REMARKS + "'";
+                    string dept = string.IsNullOrEmpty(user.DEPT) ? "NULL" : "'" + user.DEPT + "'";
+                    SqlCommand comm = new SqlCommand($"BEGIN IF NOT EXISTS (SELECT * FROM EMAIL_CONFIG WHERE USERNAME = '{user.USERNAME}') BEGIN INSERT INTO EMAIL_CONFIG (USERNAME,PASSWORD,STATUS,REMARKS,DEPARTMENT,EMAIL) VALUES ('{user.USERNAME}','{pwd}',{status},{remarks},{dept},'{user.EMAIL}') END END", conn);
+                    if (comm.ExecuteNonQuery() == 1)
+                        result.RESULT = "success";
+                    else
+                    {
+                        result.RESULT = "fail";
+                        result.MSG = "用户已存在！";
+                    }
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    result.RESULT = "fail";
+                    result.MSG = ex.Message;
+                    return result;
+                }
+            }
+        }
+        /// <summary>
+        /// 新建绑定关系
+        /// </summary>
+        /// <param name="handle_customer"></param>
+        /// <param name="handle_user"></param>
+        /// <returns></returns>
+        public ResultTask AddGroup(string handle_customer, string handle_user)
+        {
+            ResultTask result = new ResultTask();
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(handle_customer) || string.IsNullOrEmpty(handle_user)) throw new Exception("handle_customer or handle_user is empty.");
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::AddGroup => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"BEGIN IF NOT EXISTS (SELECT * FROM EMAIL_GROUP WHERE HANDLE_CUSTOMER = {handle_customer} AND HANDLE_EMAIL = {handle_user}) BEGIN INSERT INTO EMAIL_GROUP (HANDLE_CUSTOMER,HANDLE_EMAIL) VALUES ({handle_customer},{handle_user}) END END", conn);
+                    if (comm.ExecuteNonQuery() == 1)
+                        result.RESULT = "success";
+                    else
+                    {
+                        result.RESULT = "fail";
+                        result.MSG = "绑定已存在！";
+                    }
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    result.RESULT = "fail";
+                    result.MSG = ex.Message;
+                    return result;
+                }
+            }
+        }
+        /// <summary>
+        /// 解除客户与用户间的绑定关系
+        /// </summary>
+        /// <param name="handle_customer"></param>
+        /// <param name="handle_user"></param>
+        /// <returns></returns>
+        public ResultTask DelGroup(string handle_customer, string handle_user)
+        {
+            ResultTask result = new ResultTask();
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(handle_customer) || string.IsNullOrEmpty(handle_user)) throw new Exception("handle_customer or handle_user is empty.");
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::DelGroup => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"DELETE FROM EMAIL_GROUP WHERE HANDLE_CUSTOMER = '{handle_customer}' AND HANDLE_EMAIL = '{handle_user}'", conn);
+                    if (comm.ExecuteNonQuery() == 1)
+                    {
+                        result.RESULT = "success";
+
+                    }
+                    else
+                    {
+                        result.RESULT = "fail";
+                    }
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    result.RESULT = "fail";
+                    result.MSG = ex.Message;
+                    return result;
+                }
+            }
+        }
+        /// <summary>
+        /// 根据任务号获取电池数量及待补充的数据内容
+        /// </summary>
+        /// <param name="taskno"></param>
+        /// <returns></returns>
+        public DATA_SUPPLEMENT GetQtyByTaskNo(string taskno)
+        {
+            if (string.IsNullOrEmpty(taskno)) return null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::GetQtyByTaskNo => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"SELECT DISTINCT T.ITEM_NO,DS.DATA_TYPE,T.QTY_TOTAL FROM TASK T INNER JOIN ITEM I ON T.ITEM_NO = I.ITEM INNER JOIN DATA_SUPPLEMENT DS ON I.HANDLE = DS.HANDLE_ITEM WHERE T.SN = '{taskno}';", conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("TaskManagement::GetQtyByTaskNo => There is no additional data to add.");
+                    DATA_SUPPLEMENT result = new DATA_SUPPLEMENT();
+                    while (reader.Read())
+                    {
+                        result.ITEM_NO = reader["ITEM_NO"].ToString();
+                        result.QTY = reader["QTY_TOTAL"].ToString();
+                        result.DATA_TYPE = reader["DATA_TYPE"].ToString();
+                    }
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return null;
+            }
+        }
+        /// <summary>
+        /// 随机获取补充值
+        /// </summary>
+        /// <param name="taskno"></param>
+        /// <returns></returns>
+        public DataTable GetDataSupplement(string taskno)
+        {
+            if (string.IsNullOrEmpty(taskno)) return null;
+            DATA_SUPPLEMENT result = GetQtyByTaskNo(taskno);
+            if (result == null) return null;
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("TaskManagement::GetDataSupplement => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"SELECT TOP {result.QTY} DATA_VALUE FROM DATA_SUPPLEMENT DS INNER JOIN ITEM I ON DS.HANDLE_ITEM = I.HANDLE WHERE I.ITEM = '{result.ITEM_NO}' AND DS.DATA_TYPE = '{result.DATA_TYPE}' AND DS.STATE IS NULL ORDER BY NEWID();", conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("TaskManagement::GetDataSupplement => There is no additional data to add.");
+                    DataTable dt = new DataTable();
+                    dt.Load(reader);
+                    return dt;
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                return null;
+            }               
+        }
+
+    }
+    public class SyncAnker
+    {
+        public AnkerTask CreateTask(string file)
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncTWS::CreateTask => SyncRemote database can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT * FROM ANKER_CONFIG WHERE STATE = 'Y';"), conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows)
+                    {
+                        throw new Exception("ANKER_CONFIG data does not exist.");
+                    }
+                    AnkerTask task = new AnkerTask();
+                    reader.Read();
+                    task.APPID = reader["APPID"].ToString();
+                    task.SECRET = reader["SECRET"].ToString();
+                    task.TYPE = reader["TYPE"].ToString();
+                    task.URI = reader["URI"].ToString();
+                    task.HANDLE_CONFIG = reader["HANDLE"].ToString();
+                    task.URI_TOKEN = reader["URI_TOKEN"].ToString();
+                    reader.Close();
+                    comm.CommandText = string.Format(string.Format("INSERT INTO ANKER_TASK (HANDLE_TASK,HANDLE_CONFIG,STATE,COMMENTS) OUTPUT INSERTED.HANDLE VALUES (null,'{0}','{1}','{2}');", task.HANDLE_CONFIG, "未开始", file));
+                    string handle = comm.ExecuteScalar().ToString();
+                    task.HANDLE = handle;
+                    return task;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog("SyncAnker::CreateTask ==> " + ex.Message);
+                    return null;
+                }
+            }
+        }
+        public TokenAnker InitToken(AnkerTask task)
+        {
+            try
+            {
+                WebSOAP soap = new WebSOAP();
+                string result = soap.Anker__QuerySoapWebApiToken(task);
+                TokenAnker token = JsonConvert.DeserializeObject<TokenAnker>(result);
+                return token;
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog("SyncAnker::InitToken ==> " + ex.Message);
+                return null;
+            }
+        }
+        public void UpdateToken(string token)
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::UpdateToken => SyncRemote database can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"UPDATE ANKER_CONFIG SET TOKEN = '{token}' WHERE STATE = 'Y';", conn);
+                    comm.ExecuteNonQuery();
+                    conn.Close();
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                }
+            }
+        }
+        public string GetToken()
+        {
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::GetToken => SyncRemote database can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"SELECT TOKEN FROM ANKER_CONFIG WHERE STATE = 'Y';", conn);
+                    string token = comm.ExecuteScalar().ToString();
+                    return token; 
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        public AnkerTask GetTask(string handle)
+        {
+            if (string.IsNullOrEmpty(handle))
+            {
+                return null;
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::GetTask => SyncRemote database can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT T.HANDLE,T.HANDLE_CONFIG,T.HANDLE_TASK, C.APPID ,C.SECRET,T.TOKEN,C.URI,C.URI_TOKEN,T.STATE,T.TOTAL FROM ANKER_TASK T INNER JOIN ANKER_CONFIG C ON T.HANDLE_CONFIG = C.HANDLE WHERE T.HANDLE = '{0}';", handle), conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    AnkerTask task = new AnkerTask();
+                    reader.Read();
+                    task.HANDLE = reader["HANDLE"].ToString();
+                    task.HANDLE_CONFIG = reader["HANDLE_CONFIG"].ToString();
+                    task.HANDLE_TASK = reader["HANDLE_TASK"].ToString();
+                    task.APPID = reader["APPID"].ToString();
+                    task.SECRET = reader["SECRET"].ToString();
+                    task.URI = reader["URI"].ToString();
+                    task.TOKEN = reader["TOKEN"].ToString();
+                    task.STATE = reader["STATE"].ToString();
+                    task.TOTAL = !string.IsNullOrEmpty(reader["TOTAL"].ToString()) ? Convert.ToInt32(reader["TOTAL"].ToString()) : 0;
+                    task.URI_TOKEN = reader["URI_TOKEN"].ToString();
+                    reader.Close();
+                    return task;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        public void UpdateTaskComplete(AnkerTask task)
+        {
+            if (task == null) return ;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::UpdateTaskComplete => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"UPDATE ANKER_TASK SET COMPLETED = {task.COMPLETED} WHERE HANDLE = '{task.HANDLE}';", conn);
+                    comm.ExecuteNonQuery();
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return;
+                }
+            }
+        }
+        public void UpdateTask(AnkerTask task, string state, int complete)
+        {
+            if (task == null || string.IsNullOrEmpty(state))
+            {
+                return;
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::UpdateTask => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand();
+                    comm.Connection = conn;
+                    comm.CommandText = $"UPDATE ANKER_TASK SET STATE = '{state}',COMPLETED = {complete} WHERE HANDLE = '{task.HANDLE}';";
+                    comm.ExecuteNonQuery();
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return ;
+                }
+            }
+        }
+        public int CheckIn(List<BatteryAnker> batteryList, AnkerTask task)
+        {
+            if (batteryList.Count == 0 || task == null)
+            {
+                return 0;
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                SqlTransaction tran = conn.BeginTransaction();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::CheckIn => SyncRemote database can not be open.");
+                    }
+                    StringBuilder sql = new StringBuilder();
+                    foreach (BatteryAnker battery in batteryList)
+                    {
+                        //sql.Append($"INSERT INTO ANKER_SYNCBATTERY (HANDLE_TASK,BARCODE,OCV1,OCV1_TESTTIME,IR1,OCV2,OCV2_TESTTIME,IR2,KVALUE,CAPACITY,VOLTAGE,RESISTANCE,GRADE,TEST_RESULT,TEST_TIME,LOT,MATERIALS_NO,STATION_ID) VALUES ('{task.HANDLE}','{battery.BARCODE}','{battery.OCV1}','{battery.OCV1_TESTTIME}','{battery.IR1}','{battery.OCV2}','{battery.OCV2_TESTTIME}','{battery.IR2}','{battery.KVALUE}','{battery.CAPACITY}','{battery.VOLTAGE}','{battery.RESISTANCE}','{battery.GRADE}','{battery.TEST_RESULT}','{battery.TEST_TIME}','{battery.LOT}','{battery.MATERIALS_NO}','{battery.STATION_ID}');");
+                        //sql.Append($"INSERT INTO ANKER_SYNCBATTERY (HANDLE_TASK,BARCODE,OCV1,OCV1_TESTTIME,IR1,OCV2,OCV2_TESTTIME,IR2,KVALUE,CAPACITY,VOLTAGE,RESISTANCE,GRADE,TEST_RESULT,TEST_TIME,LOT,MATERIALS_NO,STATION_ID,JYL,VOLTAGE_OCV1,RESISTANCE_OCV1,TESTTIME_OCV1,VOLTAGE_OCV2,RESISTANCE_OCV2,TESTTIME_OCV2,VOLTAGE_SHELL,THICKNESS,WIDTH) VALUES ('{task.HANDLE}','{battery.BARCODE}','{battery.OCV1}','{battery.OCV1_TESTTIME}','{battery.IR1}','{battery.OCV2}','{battery.OCV2_TESTTIME}','{battery.IR2}','{battery.KVALUE}','{battery.CAPACITY}','{battery.VOLTAGE}','{battery.RESISTANCE}','{battery.GRADE}','{battery.TEST_RESULT}','{battery.TEST_TIME}','{battery.LOT}','{battery.MATERIALS_NO}','{battery.STATION_ID}','{battery.JYL}','{battery.VOLTAGE_OCV1}','{battery.RESISTANCE_OCV1}','{battery.TESTTIME_OCV1}','{battery.VOLTAGE_OCV2}','{battery.RESISTANCE_OCV2}','{battery.TESTTIME_OCV2}','{battery.VOLTAGE_SHELL}','{battery.THICKNESS}','{battery.WIDTH}');");
+                        sql.Append($"INSERT INTO ANKER_SYNCBATTERY (HANDLE_TASK,BARCODE,OCV1,OCV1_TESTTIME,IR1,OCV2,OCV2_TESTTIME,IR2,KVALUE,CAPACITY,VOLTAGE,RESISTANCE,GRADE,TEST_RESULT,TEST_TIME,LOT,MATERIALS_NO,STATION_ID,JYL,VOLTAGE_SHELL) VALUES ('{task.HANDLE}','{battery.BARCODE}','{battery.OCV1}','{battery.OCV1_TESTTIME}','{battery.IR1}','{battery.OCV2}','{battery.OCV2_TESTTIME}','{battery.IR2}','{battery.KVALUE}','{battery.CAPACITY}','{battery.VOLTAGE}','{battery.RESISTANCE}','{battery.GRADE}','{battery.TEST_RESULT}','{battery.TEST_TIME}','{battery.LOT}','{battery.MATERIALS_NO}','{battery.STATION_ID}','{battery.JYL}','{battery.VOLTAGE_SHELL}');");
+                    }
+                    SqlCommand comm = new SqlCommand(sql.ToString(), conn);
+                    comm.Transaction = tran;
+                    int count = comm.ExecuteNonQuery();
+                    tran.Commit();
+                    comm.CommandText = $"UPDATE ANKER_TASK SET TOTAL = TOTAL + {count} WHERE HANDLE = '{task.HANDLE}';";
+                    comm.ExecuteNonQuery();
+                    return count;
+                }
+                catch (Exception ex)
+                {
+                    tran.Rollback();
+                    SysLog log = new SysLog(ex.Message);
+                    return 0;
+                }
+            }
+        }
+        public int CreateSendInfo(AnkerTask task)
+        {
+            if (task == null) return 0;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                int seed = 10, _count = 0, __count = 0;
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::CreateSendInfo => SyncRemote database can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"SELECT * FROM ANKER_SyncBattery WHERE HANDLE_TASK = '{task.HANDLE}'", conn);
+                    SqlDataReader reader = comm.ExecuteReader();
+                    if (!reader.HasRows) throw new Exception("No data ANKER_SyncBattery.");
+                    StringBuilder sb = new StringBuilder();
+                    SysDataAnker request = new SysDataAnker();
+                    string station_id = null, material_no = null;
+                    while (reader.Read())
+                    {
+                        ++_count;
+                        station_id = reader["STATION_ID"].ToString();
+                        material_no = reader["MATERIALS_NO"].ToString();
+                        ItemsAnker items = new ItemsAnker();
+                        items.bar_code = reader["BARCODE"].ToString();
+                        items.materials_po = reader["LOT"].ToString();
+                        items.test_time = reader["TEST_TIME"].ToString();
+                        for (int i = 0; i < reader.FieldCount; ++i)
+                        {
+                            SysItemAnker data = new SysItemAnker();
+
+                            if (reader.GetName(i) == "VOLTAGE")
+                            {
+                                data.name = "出货电压";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "RESISTANCE")
+                            {
+                                data.name = "出货内阻";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "TEST_TIME")
+                            {
+                                data.name = "出货测试时间";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "KVALUE")
+                            {
+                                data.name = "K值";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "CAPACITY")
+                            {
+                                data.name = "容量";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "GRADE")
+                            {
+                                data.name = "档位";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "JYL")
+                            {
+                                data.name = "保液量";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "OCV1")
+                            {
+                                data.name = "OCV1测试电压";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "IR1")
+                            {
+                                data.name = "OCV1测试内阻";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "OCV1_TESTTIME")
+                            {
+                                data.name = "OCV1测试时间";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "OCV2")
+                            {
+                                data.name = "OCV2测试电压";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "IR2")
+                            {
+                                data.name = "OCV2测试内阻";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "OCV2_TESTTIME")
+                            {
+                                data.name = "OCV2测试时间";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                            }
+                            if (reader.GetName(i) == "VOLTAGE_SHELL")
+                            {
+                                data.name = "边电压";
+                                data.val = reader[i].ToString();
+                                data.result = 1;
+                                items.test_time = reader[i].ToString();
+                            }
+                            if (string.IsNullOrEmpty(data.name)) continue;
+                            items.data.Add(data);
+                        }
+                        request.items.Add(items);
+                        if (_count % seed == 0)
+                        {
+                            if (string.IsNullOrEmpty(request.station_id)) request.station_id = station_id;
+                            if (string.IsNullOrEmpty(request.material_no)) request.material_no = material_no;
+                            sb.Append($"INSERT INTO ANKER_SEND_INFO (HANDLE_TASK,CONTENTS,QTY) VALUES ('{task.HANDLE}','{JsonConvert.SerializeObject(request)}','1');");
+                            request = new SysDataAnker();
+                        }
+                    }
+                    if (request.items.Count != 0)
+                    {
+                        if (string.IsNullOrEmpty(request.station_id)) request.station_id = station_id;
+                        if (string.IsNullOrEmpty(request.material_no)) request.material_no = material_no;
+                        sb.Append($"INSERT INTO ANKER_SEND_INFO (HANDLE_TASK,CONTENTS,QTY) VALUES ('{task.HANDLE}','{JsonConvert.SerializeObject(request)}','1');");
+                    }
+                    reader.Close();
+                    SqlTransaction tran = conn.BeginTransaction();
+                    try
+                    {
+                        comm.Transaction = tran;
+                        comm.CommandText = sb.ToString();
+                        int count = comm.ExecuteNonQuery();
+                        tran.Commit();
+                        return _count;
+                    }
+                    catch (Exception ex)
+                    {
+                        tran.Rollback();
+                        SysLog log = new SysLog("SyncAnker::CreateSendInfo=>" + ex.Message);
+                        return 0;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog("SyncAnker::CreateSendInfo=>" + ex.Message);
+                    return 0;
+                }
+            }
+        }
+        public int BackupSyncbattery(AnkerTask task)
+        {
+            if (task == null) return 0;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                try
+                {
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::BackupSyncbattery => SyncRemote database can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"INSERT ANKER_SyncBattery_LOG (HANDLE_TASK,BARCODE,OCV1,OCV1_TESTTIME,IR1,OCV2,OCV2_TESTTIME,IR2,KVALUE,CAPACITY,VOLTAGE,RESISTANCE,GRADE,TEST_RESULT,TEST_TIME,LOT,MATERIALS_NO,STATION_ID,JYL,VOLTAGE_SHELL,THICKNESS,WIDTH,CREATED_USER) SELECT HANDLE_TASK,BARCODE,OCV1,OCV1_TESTTIME,IR1,OCV2,OCV2_TESTTIME,IR2,KVALUE,CAPACITY,VOLTAGE,RESISTANCE,GRADE,TEST_RESULT,TEST_TIME,LOT,MATERIALS_NO,STATION_ID,JYL,VOLTAGE_SHELL,THICKNESS,WIDTH,CREATED_USER FROM ANKER_SyncBattery WHERE HANDLE_TASK = '{task.HANDLE}';", conn);
+                    if (comm.ExecuteNonQuery() == task.TOTAL)
+                    {
+                        comm.CommandText = $"DELETE FROM ANKER_SyncBattery WHERE HANDLE_TASK = '{task.HANDLE}';";
+                        return comm.ExecuteNonQuery();
+                    }
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return 0;
+                }
+            }
+        }
+        public void SendData(ref AnkerTask task)
+        {
+            if (task == null || task.STATE != "准备就绪")
+            {
+                return;
+            }
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+                {
+                    conn.Open();
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::SendData => SyncRemote db can not be open.");
+                    }
+                    SqlCommand comm = new SqlCommand($"SELECT HANDLE,CONTENTS FROM ANKER_SEND_INFO WHERE HANDLE_TASK = '{task.HANDLE}';", conn);
+                    using (SqlDataReader reader = comm.ExecuteReader())
+                    {
+                        if (!reader.HasRows) throw new Exception("SyncAnker::SendData => ANKER_SEND_INFO is empty.");
+                        WebSOAP soap = new WebSOAP();
+                        while (reader.Read())
+                        {
+                            string token = GetToken();
+                            task.TOKEN = token;
+                            string info = soap.Anker__QuerySoapWebApi(task, reader["CONTENTS"].ToString());
+                            ResultAnker result = JsonConvert.DeserializeObject<ResultAnker>(info);
+                            string handle = RecievedLog(reader["HANDLE"].ToString(), info, task);
+                            if (result.res_code == 1)
+                            {
+                                BackupSendInfo(task, reader["HANDLE"].ToString(), handle);
+                                //if (BackupSendInfo(task, reader["HANDLE"].ToString(), handle) == 1)
+                                //{
+                                //task.COMPLETED++;
+                                //}
+                            }
+                            else
+                            {
+                                throw new Exception("The peer server returns the message \"Failed\".");
+                                //break;
+                            }
+                        }
+                    }
+                    //if (task.COMPLETED == task.TOTAL)
+                    //{
+                    UpdateTask(task, "成功", task.TOTAL);
+                    //}
+                    //else
+                    //{
+                    //}
+                    //UpdateTaskComplete(task);
+                    //Complete(ref task);
+                }
+            }
+            catch (Exception ex)
+            {
+                SysLog log = new SysLog(ex.Message);
+                UpdateTask(task, "失败", 0);
+            }
+            //UpdateTaskComplete(task);
+            Complete(ref task);
+
+        }
+        private string RecievedLog(string handle_send, string contents, AnkerTask task)
+        {
+            if (string.IsNullOrEmpty(contents) || task == null) return null;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                if (conn.State != ConnectionState.Open)
+                {
+                    throw new Exception("WebSOAP::RecievedLog => SyncRemote db can not be open.");
+                }
+                try
+                {
+                    SqlCommand comm = new SqlCommand($"INSERT INTO ANKER_RECIEVED_INFO (HANDLE_TASK,HANDLE_SEND_INFO,RECIEVED_INFO) OUTPUT INSERTED.HANDLE VALUES ('{task.HANDLE}','{handle_send}','{contents}');", conn);
+                    string handle = comm.ExecuteScalar().ToString();
+                    return handle;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
+        private int BackupSendInfo(AnkerTask task, string handle_send_info, string handle_recieved)
+        {
+            if (task == null || string.IsNullOrEmpty(handle_send_info)) return 0;
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                conn.Open();
+                if (conn.State != ConnectionState.Open)
+                {
+                    throw new Exception("WebSOAP::BackupSendInfo => SyncRemote db can not be open.");
+                }
+                try
+                {
+                    int result = 0;
+                    SqlCommand comm = new SqlCommand($"INSERT INTO ANKER_SNED_LOG (HANDLE_TASK,HANDLE_SEND_INFO,HANDLE_RECIEVED,CONTENTS,QTY,CREATED_DATE_TIME) SELECT HANDLE_TASK,HANDLE,'{handle_recieved}',CONTENTS,'1',CREATED_DATE_TIME FROM ANKER_SEND_INFO WHERE HANDLE = '{handle_send_info}';", conn);
+                    if (comm.ExecuteNonQuery() == 1)
+                    {
+                        comm.CommandText = $"DELETE FROM ANKER_SEND_INFO WHERE HANDLE = '{handle_send_info}'";
+                        result = comm.ExecuteNonQuery();
+                    }
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return 0;
+                }
+
+            }
+        }
+        public void Complete(ref AnkerTask task)
+        {
+            if (task.HANDLE == null)
+            {
+                return;
+            }
+            using (SqlConnection conn = new SqlConnection(Configuer.ConnectionStringBySyncRemote))
+            {
+                try
+                {
+                    conn.Open();
+                    // 数据库未打开
+                    if (conn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("SyncAnker::Complete => Anker database can not be open.");
+                    }
+                    // 任务未成功
+                    SqlCommand comm = new SqlCommand(string.Format("SELECT COUNT(1) FROM ANKER_TASK WHERE STATE = '成功' AND HANDLE = '{0}'", task.HANDLE), conn);
+                    if (comm.ExecuteScalar().ToString() != "1")
+                    {
+                        return;
+                    }
+                    comm.CommandText = $"SELECT HANDLE,TOTAL,COMPLETED,STATE,CREATED_DATE_TIME,COMMENTS FROM ANKER_TASK WHERE HANDLE = '{task.HANDLE}'";
+                    SqlDataReader reader = comm.ExecuteReader();
+                    TableWeb tWeb = new TableWeb();
+                    tWeb.addThead("任务编号");
+                    tWeb.addThead("数据文件");
+                    tWeb.addThead("任务状态");
+                    tWeb.addThead("开始回传时间");
+                    tWeb.addThead("计划发送数量");
+                    tWeb.addThead("完成发送数量");
+                    while (reader.Read())
+                    {
+                        tWeb.addContext(reader["HANDLE"].ToString());
+                        tWeb.addContext(reader["COMMENTS"].ToString());
+                        //if (Convert.ToInt32(reader["TOTAL"]) != Convert.ToInt32(reader["COMPLETED"]))
+                        //{
+                        //    tWeb.State = false;
+                        //    tWeb.addContext("失败");
+                        //}
+                        if (reader["STATE"].ToString() != "成功")
+                        {
+                            tWeb.State = false;
+                            tWeb.addContext("失败");
+                        }
+                        else
+                        {
+                            tWeb.addContext("成功");
+                        }
+                        tWeb.addContext(reader["CREATED_DATE_TIME"].ToString());
+                        tWeb.addContext(reader["TOTAL"].ToString());
+                        tWeb.addContext(reader["COMPLETED"].ToString());
+                    }
+                    reader.Close();
+                    comm.CommandText = "SELECT EC.EMAIL FROM CUSTOMER G INNER JOIN EMAIL_GROUP EG ON G.HANDLE = EG.HANDLE_CUSTOMER INNER JOIN EMAIL_CONFIG EC ON EG.HANDLE_EMAIL = EC.HANDLE WHERE G.CUSTOMER = 'ANKER';";
+                    reader = comm.ExecuteReader();
+                    StringBuilder emailList = new StringBuilder();
+                    while (reader.Read())
+                    {
+                        emailList.Append(reader[0].ToString());
+                        emailList.Append(",");
+                    }
+                    reader.Close();
+                    //发送邮件
+                    Mail.SendMail(emailList.ToString(), System.Configuration.ConfigurationManager.AppSettings["ExchangeUID"], System.Configuration.ConfigurationManager.AppSettings["ExchangePWD"], System.Configuration.ConfigurationManager.AppSettings["ExchangeDomain"], "Anker 数据发送任务", tWeb.TableHtml());
+
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                }
+            }
+        }
+
     }
 }

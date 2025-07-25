@@ -137,6 +137,7 @@ namespace LSMES_5ANEW_PLUS.SRC.Common
             doc = LoadvalidDataOfSAP_ME(code, nodename, strIpAddress);
             if (doc != null)
             {
+                SysLog log = new SysLog(doc.ToString());
                 return doc;
             }
             return LoadvalidData(code, nodename, strIpAddress);
@@ -150,6 +151,7 @@ namespace LSMES_5ANEW_PLUS.SRC.Common
             doc = LoadvalidDataOfSAP_ME(code, nodename, strIpAddress);
             if (doc != null)
             {
+                SysLog log = new SysLog(doc.ToString());
                 return doc;
             }
             return LoadvalidData(code, nodename, strIpAddress);

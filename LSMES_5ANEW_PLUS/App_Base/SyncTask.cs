@@ -877,6 +877,9 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string STATE { get; set; }
         public string CREATED_DATE_TIME { get; set; }
         public string EXPRESS_QTY { get; set; }
+        public string TOKEN { get; set; }
+        public string URI_TOKEN { get; set; }
+        public string TOKEN_PARA { get; set; }
     }
     public class SCUDTask
     {
@@ -907,5 +910,32 @@ namespace LSMES_5ANEW_PLUS.App_Base
         public string ITEM { get; set; }
         public string BOM { get; set; }
         public string STATE { get; set; }
+    }
+    public class AnkerTask
+    {
+        /// <summary>
+        /// Anker 任务 handle
+        /// </summary>
+        public string HANDLE { get; set; }
+        /// <summary>
+        /// 任务管理器 handle
+        /// </summary>
+        public string HANDLE_TASK { get; set; }
+        /// <summary>
+        /// Anker 配置
+        /// </summary>
+        public string HANDLE_CONFIG { get; set; }
+        /// <summary>
+        /// 回传地址
+        /// </summary>
+        public string URI { get; set; }
+        public string APPID { get; set; }
+        public string SECRET { get; set; }
+        public string TYPE { get; set; }
+        public string TOKEN { get; set; }
+        public int COMPLETED { get; set; }
+        public int TOTAL { get; set; }
+        public string STATE { get; set; }
+        public string URI_TOKEN { get; set; }
     }
 }
