@@ -1204,6 +1204,61 @@ namespace LSMES_5ANEW_PLUS.Business
                 }
             }
         }
+        public static List<AmazonKazamStatistics> GetGetPallets(string type, string pallets)
+        {
+            using (SqlConnection mConn = new SqlConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SyncRemote"].ConnectionString)) {
+                try
+                {
+                    mConn.Open();
+                    if (mConn.State != ConnectionState.Open)
+                    {
+                        throw new Exception("Datum::Statistics => fail to open database.");
+                    }
+                    SqlCommand comm = new SqlCommand();
+                    comm.Connection = mConn;
+                    if (type.ToUpper() == "CELL")
+                    {
+                        comm.CommandText = $"SELECT C.ITEM_NO,C.PROJECT,C.PHASE,C.PTYPE,C.STATE,A.CELL_PALLET_NO,SUM(CASE WHEN A.STATE = 'READY' THEN 1 ELSE 0 END) AS READY,COUNT(1) AS TOTAL FROM AMAZON_KAZAM_CELL A INNER JOIN AMAZON_CONFIG C ON C.HANDLE = A.HANDLE_CONFIG WHERE CELL_PALLET_NO IN ({pallets}) GROUP BY C.ITEM_NO,C.PROJECT,C.PHASE,C.PTYPE,C.STATE,A.CELL_PALLET_NO;";
+                    }
+                    else if (type.ToUpper() == "PACK")
+                    {
+                        comm.CommandText = $"SELECT C.ITEM_NO,C.PROJECT,C.PHASE,C.PTYPE,C.STATE,A.PACK_PLT_NO,SUM(CASE WHEN A.STATE = 'Y' THEN 1 ELSE 0 END) AS READY,COUNT(1) AS TOTAL FROM AMAZON_KAZAM_PACK A INNER JOIN AMAZON_CONFIG C ON C.HANDLE = A.HANDLE_CONFIG WHERE PACK_PLT_NO IN ({pallets}) GROUP BY C.ITEM_NO,C.PROJECT,C.PHASE,C.PTYPE,C.STATE,A.PACK_PLT_NO;";
+                    }
+                    else
+                    {
+                        throw new Exception("Statistics cannot be performed because the type does not match");
+                    }
+                    SqlDataReader reader = comm.ExecuteReader();
+                    List<AmazonKazamStatistics> Entitys = new List<AmazonKazamStatistics>();
+                    while (reader.Read())
+                    {
+                        AmazonKazamStatistics entity = new AmazonKazamStatistics();
+                        entity.item_no = reader["item_no"].ToString();
+                        entity.project = reader["project"].ToString();
+                        entity.phase = reader["phase"].ToString();
+                        entity.ready = reader["ready"].ToString();
+                        entity.total = reader["total"].ToString();
+                        entity.type = reader["ptype"].ToString();
+                        entity.state = reader["state"].ToString();
+                        if (type.ToUpper() == "CELL")
+                        {
+                            entity.pallet_no = reader["CELL_PALLET_NO"].ToString();
+                        }
+                        else if (type.ToUpper() == "PACK")
+                        {
+                            entity.pallet_no = reader["PACK_PLT_NO"].ToString();
+                        }
+                        Entitys.Add(entity);
+                    }
+                    return Entitys;
+                }
+                catch (Exception ex)
+                {
+                    SysLog log = new SysLog(ex.Message);
+                    return null;
+                }
+            }
+        }
         /// <summary>
         /// 将可以回传的电池 state 更新为 READY
         /// </summary>

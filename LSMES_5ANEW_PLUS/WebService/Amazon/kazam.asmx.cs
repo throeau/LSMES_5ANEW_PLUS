@@ -8,6 +8,8 @@ using LSMES_5ANEW_PLUS.App_Base;
 using Newtonsoft.Json;
 using System.Data;
 using System.Collections;
+using System;
+using System.Text.RegularExpressions;
 
 namespace LSMES_5ANEW_PLUS.WebService.Amazon
 {
@@ -199,6 +201,20 @@ namespace LSMES_5ANEW_PLUS.WebService.Amazon
         {
             List<AmazonKazamStatistics> result = new List<AmazonKazamStatistics>();
             result = Datum.Statistics(type);
+            Context.Response.Charset = "UTF-8";
+            Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
+            Context.Response.Write(JsonConvert.SerializeObject(result));
+            Context.Response.End();
+        }
+        [WebMethod]
+        public void GetPallets(string type, string pallets)
+        {
+            if (string.IsNullOrEmpty(type) || string.IsNullOrEmpty(pallets)) return;
+            // 正则匹配：\r\n 或 单个字符（逗号、空格、\n）
+            string pattern = @"\r\n|[\s,\n]";
+            pallets = "'" + Regex.Replace(pallets, pattern, "','") + "'";
+            List<AmazonKazamStatistics> result = new List<AmazonKazamStatistics>();
+            result = Datum.GetGetPallets(type, pallets);
             Context.Response.Charset = "UTF-8";
             Context.Response.ContentEncoding = System.Text.Encoding.GetEncoding("UTF-8");
             Context.Response.Write(JsonConvert.SerializeObject(result));
